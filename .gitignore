@@ -13,3 +13,4 @@ web-build/
 # Native builds (managed workflow with CNG / EAS Prebuild)
 android/
 ios/
+*.apk
