@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import { theme } from './src/theme';
 import HomeScreen from './src/screens/HomeScreen';
 import EditTaskScreen from './src/screens/EditTaskScreen';
+import WebDavSettingsScreen from './src/screens/WebDavSettingsScreen';
 import { notificationService } from './src/services/notificationService';
 
 const Stack = createNativeStackNavigator();
@@ -48,6 +49,11 @@ export default function App() {
               options={({ route }) => ({
                 title: route.params?.task ? 'Editar Tarefa' : 'Nova Tarefa',
               })}
+            />
+            <Stack.Screen
+              name="WebDavSettings"
+              component={WebDavSettingsScreen}
+              options={{ title: 'Sincronização WebDAV' }}
             />
           </Stack.Navigator>
         </NavigationContainer>

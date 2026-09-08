@@ -2,7 +2,7 @@
   "expo": {
     "name": "WillDo",
     "slug": "willdo-mobile",
-    "version": "1.0.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -39,7 +39,8 @@
           "sounds": []
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-secure-store"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

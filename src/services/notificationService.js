@@ -1,6 +1,8 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { storageService } from './storageService';
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -84,5 +86,20 @@ export const notificationService = {
     } catch (error) {
       console.warn('Erro ao cancelar todas as notificações:', error);
     }
+  },
+
+  async rescheduleTasks(tasks) {
+    await this.cancelAllNotifications();
+    const refreshedTasks = [];
+
+    for (const task of tasks) {
+      const refreshedTask = { ...task, notificationId: null };
+      if (!task.completed && task.due_at && new Date(task.due_at) > new Date()) {
+        refreshedTask.notificationId = await this.scheduleTaskNotification(refreshedTask);
+      }
+      refreshedTasks.push(refreshedTask);
+    }
+
+    return await storageService.saveTasks(refreshedTasks);
   }
 };

@@ -4,7 +4,41 @@ export const RECURRENCE_OPTIONS = [
   'Semanalmente',
   'Mensalmente no mesmo dia',
   'Anualmente no mesmo dia',
+  'Personalizado',
 ];
+
+export const CUSTOM_RECURRENCE_UNITS = [
+  { value: 'hours', label: 'Horas', singular: 'hora', plural: 'horas' },
+  { value: 'days', label: 'Dias', singular: 'dia', plural: 'dias' },
+  { value: 'weeks', label: 'Semanas', singular: 'semana', plural: 'semanas' },
+];
+
+export function formatCustomRecurrence(interval, unit) {
+  const safeInterval = Math.max(1, Number.parseInt(interval, 10) || 1);
+  const unitConfig = CUSTOM_RECURRENCE_UNITS.find(item => item.value === unit)
+    || CUSTOM_RECURRENCE_UNITS[1];
+  const unitLabel = safeInterval === 1 ? unitConfig.singular : unitConfig.plural;
+  return `A cada ${safeInterval} ${unitLabel}`;
+}
+
+export function parseCustomRecurrence(recurrence) {
+  if (typeof recurrence !== 'string') return null;
+
+  const match = recurrence.trim().match(/^A cada (\d+) (hora|horas|dia|dias|semana|semanas)$/i);
+  if (!match) return null;
+
+  const normalizedUnit = match[2].toLowerCase();
+  const unit = normalizedUnit.startsWith('hora')
+    ? 'hours'
+    : normalizedUnit.startsWith('semana')
+      ? 'weeks'
+      : 'days';
+
+  return {
+    interval: Math.max(1, Number.parseInt(match[1], 10)),
+    unit,
+  };
+}
 
 export function isLeapYear(year) {
   return (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
@@ -20,6 +54,19 @@ export function isLeapYear(year) {
 export function calculateNextDue(oldDate, recurrence) {
   const d = new Date(oldDate);
   if (isNaN(d.getTime())) return new Date();
+
+  const customRecurrence = parseCustomRecurrence(recurrence);
+  if (customRecurrence) {
+    const next = new Date(d);
+    if (customRecurrence.unit === 'hours') {
+      next.setHours(next.getHours() + customRecurrence.interval);
+    } else if (customRecurrence.unit === 'weeks') {
+      next.setDate(next.getDate() + (customRecurrence.interval * 7));
+    } else {
+      next.setDate(next.getDate() + customRecurrence.interval);
+    }
+    return next;
+  }
 
   switch (recurrence) {
     case 'Diariamente': {

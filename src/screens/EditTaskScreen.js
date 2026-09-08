@@ -29,15 +29,24 @@ import * as Crypto from 'expo-crypto';
 
 import { storageService } from '../services/storageService';
 import { notificationService } from '../services/notificationService';
-import { RECURRENCE_OPTIONS } from '../utils/recurrence';
+import {
+  CUSTOM_RECURRENCE_UNITS,
+  RECURRENCE_OPTIONS,
+  formatCustomRecurrence,
+  parseCustomRecurrence,
+} from '../utils/recurrence';
 
 export default function EditTaskScreen({ route, navigation }) {
   const theme = useTheme();
   const existingTask = route.params?.task;
   const isEditing = Boolean(existingTask);
+  const existingCustomRecurrence = parseCustomRecurrence(existingTask?.recurrence);
 
   const [title, setTitle] = useState(existingTask?.title || '');
-  const [details, setDetails] = useState(existingTask?.details_md || '');
+  const initialDetails = existingTask?.details_md || '';
+  const [details, setDetails] = useState(initialDetails);
+  const [savedDetails, setSavedDetails] = useState(initialDetails);
+  const [detailsConsumed, setDetailsConsumed] = useState(false);
   const [hasDueDate, setHasDueDate] = useState(Boolean(existingTask?.due_at));
   const [dueAt, setDueAt] = useState(
     existingTask?.due_at ? new Date(existingTask.due_at) : new Date()
@@ -45,14 +54,33 @@ export default function EditTaskScreen({ route, navigation }) {
   const [recurrence, setRecurrence] = useState(
     existingTask?.recurrence || RECURRENCE_OPTIONS[0]
   );
+  const [customInterval, setCustomInterval] = useState(
+    String(existingCustomRecurrence?.interval || 1)
+  );
+  const [customUnit, setCustomUnit] = useState(existingCustomRecurrence?.unit || 'days');
   const [subtasks, setSubtasks] = useState(existingTask?.subtasks || []);
-  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState(null);
+  const [editingSubtaskId, setEditingSubtaskId] = useState(null);
+  const [editorDraft, setEditorDraft] = useState({ text: initialDetails, consumed: false });
+  const [editorStatus, setEditorStatus] = useState(
+    'Escolha abaixo como o conteúdo do editor será usado.'
+  );
 
   // UI States
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [customUnitMenuVisible, setCustomUnitMenuVisible] = useState(false);
   const [detailsTab, setDetailsTab] = useState('edit'); // 'edit' ou 'preview'
+  const [detailsInputHeight, setDetailsInputHeight] = useState(140);
+
+  const parsedCustomRecurrence = parseCustomRecurrence(recurrence);
+  const isCustomRecurrence = recurrence === 'Personalizado' || Boolean(parsedCustomRecurrence);
+  const selectedRecurrenceOption = isCustomRecurrence ? 'Personalizado' : recurrence;
+
+  const updateCustomRecurrence = (interval, unit) => {
+    setRecurrence(formatCustomRecurrence(interval, unit));
+  };
 
   const onDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
@@ -79,14 +107,83 @@ export default function EditTaskScreen({ route, navigation }) {
   // Funções de formatação rápida de Markdown
   const insertMarkdownSnippet = (prefix, suffix = '') => {
     setDetails(prev => `${prev}\n${prefix}Texto${suffix}\n`.trim());
+    setDetailsConsumed(false);
     setDetailsTab('edit');
   };
 
-  const addSubtask = () => {
-    const trimmed = newSubtaskTitle.trim();
+  const handleDetailsChange = (value) => {
+    setDetails(value);
+    setDetailsConsumed(false);
+  };
+
+  const addSubtaskFromEditor = () => {
+    const trimmed = details.trim();
     if (!trimmed) return;
     setSubtasks([...subtasks, { id: Crypto.randomUUID(), title: trimmed, completed: false }]);
-    setNewSubtaskTitle('');
+    setDetails('');
+    setDetailsConsumed(true);
+    setEditorStatus('✓ Subtarefa adicionada abaixo.');
+    setDetailsTab('edit');
+  };
+
+  const finishSubtaskEdit = (status) => {
+    setEditingSubtaskId(null);
+    setDetails(editorDraft.text);
+    setDetailsConsumed(editorDraft.consumed);
+    setEditorStatus(status);
+  };
+
+  const editSubtask = (subtask, switched = false) => {
+    if (editingSubtaskId === subtask.id) {
+      finishSubtaskEdit('Edição cancelada.');
+      setSelectedSubtaskId(null);
+      return;
+    }
+    if (!editingSubtaskId) {
+      setEditorDraft({ text: details, consumed: detailsConsumed });
+    }
+    setSelectedSubtaskId(subtask.id);
+    setEditingSubtaskId(subtask.id);
+    setDetails(subtask.title);
+    setDetailsConsumed(false);
+    setDetailsTab('edit');
+    setEditorStatus(
+      switched
+        ? 'Edição anterior descartada. Agora editando a subtarefa selecionada.'
+        : 'Editando a subtarefa selecionada no mesmo editor.'
+    );
+  };
+
+  const selectSubtask = (subtask) => {
+    if (selectedSubtaskId === subtask.id) {
+      if (editingSubtaskId === subtask.id) {
+        finishSubtaskEdit('Edição cancelada.');
+      }
+      setSelectedSubtaskId(null);
+      return;
+    }
+    setSelectedSubtaskId(subtask.id);
+    if (editingSubtaskId) {
+      editSubtask(subtask, true);
+    }
+  };
+
+  const saveEditorContent = () => {
+    if (editingSubtaskId) {
+      const trimmed = details.trim();
+      if (!trimmed) {
+        Alert.alert('Aviso', 'Escreva o conteúdo da subtarefa.');
+        return;
+      }
+      setSubtasks(subtasks.map(s => (
+        s.id === editingSubtaskId ? { ...s, title: trimmed } : s
+      )));
+      finishSubtaskEdit('✓ Subtarefa atualizada.');
+      return;
+    }
+    setSavedDetails(details);
+    setDetailsConsumed(false);
+    setEditorStatus('✓ Descrição geral salva.');
   };
 
   const toggleSubtask = (id) => {
@@ -95,12 +192,22 @@ export default function EditTaskScreen({ route, navigation }) {
 
   const removeSubtask = (id) => {
     setSubtasks(subtasks.filter(s => s.id !== id));
+    if (editingSubtaskId === id) {
+      finishSubtaskEdit('Subtarefa removida.');
+    }
+    if (selectedSubtaskId === id) {
+      setSelectedSubtaskId(null);
+    }
   };
 
   const handleSave = async () => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       Alert.alert('Aviso', 'Digite o nome da tarefa.');
+      return;
+    }
+    if (editingSubtaskId) {
+      Alert.alert('Aviso', 'Salve ou cancele a edição da subtarefa antes de salvar a tarefa.');
       return;
     }
 
@@ -110,9 +217,13 @@ export default function EditTaskScreen({ route, navigation }) {
     const taskData = {
       id: existingTask?.id || Crypto.randomUUID(),
       title: trimmedTitle,
-      details_md: details,
+      details_md: detailsConsumed ? savedDetails : details,
       due_at: finalDueAt,
-      recurrence: hasDueDate ? recurrence : 'Sem recorrência',
+      recurrence: hasDueDate
+        ? (isCustomRecurrence
+          ? formatCustomRecurrence(customInterval, customUnit)
+          : recurrence)
+        : 'Sem recorrência',
       subtasks,
       completed: existingTask?.completed || false,
       completed_at: existingTask?.completed_at || null,
@@ -214,7 +325,7 @@ export default function EditTaskScreen({ route, navigation }) {
                       onPress={() => setMenuVisible(true)}
                       contentStyle={{ justifyContent: 'flex-start' }}
                     >
-                      {recurrence}
+                      {isCustomRecurrence ? formatCustomRecurrence(customInterval, customUnit) : recurrence}
                     </Button>
                   }
                 >
@@ -222,14 +333,73 @@ export default function EditTaskScreen({ route, navigation }) {
                     <Menu.Item
                       key={opt}
                       onPress={() => {
-                        setRecurrence(opt);
+                        if (opt === 'Personalizado') {
+                          updateCustomRecurrence(customInterval, customUnit);
+                        } else {
+                          setRecurrence(opt);
+                        }
                         setMenuVisible(false);
                       }}
                       title={opt}
-                      leadingIcon={recurrence === opt ? 'check' : undefined}
+                      leadingIcon={selectedRecurrenceOption === opt ? 'check' : undefined}
                     />
                   ))}
                 </Menu>
+
+                {isCustomRecurrence && (
+                  <View style={styles.customRecurrenceRow}>
+                    <TextInput
+                      label="A cada"
+                      value={customInterval}
+                      onChangeText={(value) => {
+                        const digitsOnly = value.replace(/[^0-9]/g, '');
+                        setCustomInterval(digitsOnly);
+                        if (digitsOnly) updateCustomRecurrence(digitsOnly, customUnit);
+                      }}
+                      onBlur={() => {
+                        const normalizedInterval = String(Math.max(1, Number.parseInt(customInterval, 10) || 1));
+                        setCustomInterval(normalizedInterval);
+                        updateCustomRecurrence(normalizedInterval, customUnit);
+                      }}
+                      keyboardType="number-pad"
+                      mode="outlined"
+                      dense
+                      maxLength={4}
+                      style={styles.customIntervalInput}
+                    />
+
+                    <View style={styles.customUnitContainer}>
+                      <Menu
+                        visible={customUnitMenuVisible}
+                        onDismiss={() => setCustomUnitMenuVisible(false)}
+                        anchor={
+                          <Button
+                            mode="outlined"
+                            icon="chevron-down"
+                            contentStyle={styles.customUnitButtonContent}
+                            style={styles.customUnitButton}
+                            onPress={() => setCustomUnitMenuVisible(true)}
+                          >
+                            {CUSTOM_RECURRENCE_UNITS.find(item => item.value === customUnit)?.label}
+                          </Button>
+                        }
+                      >
+                        {CUSTOM_RECURRENCE_UNITS.map(unit => (
+                          <Menu.Item
+                            key={unit.value}
+                            title={unit.label}
+                            leadingIcon={customUnit === unit.value ? 'check' : undefined}
+                            onPress={() => {
+                              setCustomUnit(unit.value);
+                              updateCustomRecurrence(customInterval, unit.value);
+                              setCustomUnitMenuVisible(false);
+                            }}
+                          />
+                        ))}
+                      </Menu>
+                    </View>
+                  </View>
+                )}
               </View>
             </View>
           )}
@@ -249,9 +419,9 @@ export default function EditTaskScreen({ route, navigation }) {
               density="small"
               buttons={[
                 { value: 'edit', label: 'Editor' },
-                { value: 'preview', label: 'Preview' },
+                { value: 'preview', label: 'Prévia' },
               ]}
-              style={{ width: 180 }}
+              style={styles.detailsTabs}
             />
           </View>
 
@@ -268,13 +438,19 @@ export default function EditTaskScreen({ route, navigation }) {
 
           {detailsTab === 'edit' ? (
             <TextInput
-              placeholder="Escreva anotações ou detalhes em markdown..."
+              placeholder="Escreva a descrição geral ou uma subtarefa em Markdown..."
               value={details}
-              onChangeText={setDetails}
+              onChangeText={handleDetailsChange}
               mode="outlined"
               multiline
               numberOfLines={5}
-              style={styles.detailsInput}
+              scrollEnabled={false}
+              textAlignVertical="top"
+              rejectResponderTermination={false}
+              onContentSizeChange={({ nativeEvent }) => {
+                setDetailsInputHeight(Math.max(140, nativeEvent.contentSize.height + 24));
+              }}
+              style={[styles.detailsInput, { height: detailsInputHeight }]}
             />
           ) : (
             <View style={styles.previewContainer}>
@@ -287,6 +463,40 @@ export default function EditTaskScreen({ route, navigation }) {
               )}
             </View>
           )}
+
+          <View style={styles.editorActions}>
+            <Button
+              mode="outlined"
+              icon="content-save-outline"
+              onPress={saveEditorContent}
+            >
+              {editingSubtaskId ? 'Salvar alterações da subtarefa' : 'Salvar como descrição'}
+            </Button>
+            {editingSubtaskId ? (
+              <Button
+                mode="text"
+                icon="close"
+                onPress={() => {
+                  finishSubtaskEdit('Edição cancelada.');
+                  setSelectedSubtaskId(null);
+                }}
+              >
+                Cancelar edição
+              </Button>
+            ) : (
+              <Button
+                mode="contained"
+                icon="format-list-checks"
+                onPress={addSubtaskFromEditor}
+                disabled={!details.trim()}
+              >
+                Adicionar como subtarefa
+              </Button>
+            )}
+            <Text variant="bodySmall" style={styles.editorStatus}>
+              {editorStatus}
+            </Text>
+          </View>
         </Card.Content>
       </Card>
 
@@ -297,42 +507,33 @@ export default function EditTaskScreen({ route, navigation }) {
             Subtarefas ({subtasks.filter(s => s.completed).length}/{subtasks.length})
           </Text>
 
-          <View style={styles.addSubtaskRow}>
-            <TextInput
-              placeholder="Adicionar subtarefa..."
-              value={newSubtaskTitle}
-              onChangeText={setNewSubtaskTitle}
-              onSubmitEditing={addSubtask}
-              mode="outlined"
-              dense
-              style={styles.subtaskInput}
-            />
-            <Button
-              mode="contained"
-              onPress={addSubtask}
-              disabled={!newSubtaskTitle.trim()}
-              style={styles.addSubtaskButton}
-            >
-              Inserir
-            </Button>
-          </View>
-
           {subtasks.map((s) => (
-            <View key={s.id} style={styles.subtaskItemRow}>
+            <View
+              key={s.id}
+              style={[
+                styles.subtaskItemRow,
+                selectedSubtaskId === s.id && styles.subtaskItemSelected,
+              ]}
+            >
               <Checkbox
                 status={s.completed ? 'checked' : 'unchecked'}
                 onPress={() => toggleSubtask(s.id)}
                 color={theme.colors.primary}
               />
-              <Text
-                variant="bodyMedium"
-                style={[
-                  styles.subtaskTitle,
-                  s.completed && styles.subtaskTitleCompleted,
-                ]}
+              <TouchableOpacity
+                style={styles.subtaskMarkdownContainer}
+                activeOpacity={0.75}
+                onPress={() => selectSubtask(s)}
               >
-                {s.title}
-              </Text>
+                <Markdown style={s.completed ? completedMarkdownStyles : subtaskMarkdownStyles}>
+                  {s.title}
+                </Markdown>
+              </TouchableOpacity>
+              <IconButton
+                icon="pencil-outline"
+                size={20}
+                onPress={() => editSubtask(s, Boolean(editingSubtaskId))}
+              />
               <IconButton
                 icon="delete-outline"
                 size={20}
@@ -425,11 +626,32 @@ const styles = StyleSheet.create({
   recurrenceRow: {
     marginTop: 4,
   },
-  markdownHeaderRow: {
+  customRecurrenceRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
+  customIntervalInput: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  customUnitContainer: {
+    flex: 1,
+  },
+  customUnitButton: {
+    width: '100%',
+  },
+  customUnitButtonContent: {
+    minHeight: 46,
+    flexDirection: 'row-reverse',
+  },
+  markdownHeaderRow: {
+    gap: 8,
     marginBottom: 8,
+  },
+  detailsTabs: {
+    alignSelf: 'stretch',
   },
   sectionTitle: {
     fontWeight: '700',
@@ -453,34 +675,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  addSubtaskRow: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 12,
+  editorActions: {
+    gap: 6,
+    marginTop: 10,
   },
-  subtaskInput: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  addSubtaskButton: {
-    justifyContent: 'center',
+  editorStatus: {
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 2,
   },
   subtaskItemRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 2,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    alignItems: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
   },
-  subtaskTitle: {
+  subtaskItemSelected: {
+    borderColor: '#2563eb',
+    borderWidth: 2,
+    backgroundColor: '#eff6ff',
+  },
+  subtaskMarkdownContainer: {
     flex: 1,
-    color: '#1e293b',
-  },
-  subtaskTitleCompleted: {
-    textDecorationLine: 'line-through',
-    color: '#94a3b8',
+    paddingHorizontal: 4,
+    minHeight: 42,
   },
   saveButton: {
     marginTop: 10,
@@ -514,5 +737,28 @@ const markdownStyles = {
   },
   link: {
     color: '#2563eb',
+  },
+};
+
+const subtaskMarkdownStyles = {
+  ...markdownStyles,
+  body: {
+    ...markdownStyles.body,
+    color: '#1e293b',
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  paragraph: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+};
+
+const completedMarkdownStyles = {
+  ...subtaskMarkdownStyles,
+  body: {
+    ...subtaskMarkdownStyles.body,
+    color: '#94a3b8',
+    textDecorationLine: 'line-through',
   },
 };

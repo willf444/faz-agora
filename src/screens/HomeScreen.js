@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -28,6 +28,7 @@ import * as Crypto from 'expo-crypto';
 
 import { storageService } from '../services/storageService';
 import { notificationService } from '../services/notificationService';
+import { webDavService } from '../services/webDavService';
 import { calculateNextDue } from '../utils/recurrence';
 
 export default function HomeScreen({ navigation }) {
@@ -36,6 +37,9 @@ export default function HomeScreen({ navigation }) {
   const [filter, setFilter] = useState('pending');
   const [quickTitle, setQuickTitle] = useState('');
   const [expandedTaskId, setExpandedTaskId] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [hasSuccessfulSync, setHasSuccessfulSync] = useState(false);
+  const syncingRef = useRef(false);
   const theme = useTheme();
 
   const loadTasks = useCallback(async () => {
@@ -43,12 +47,83 @@ export default function HomeScreen({ navigation }) {
     setTasks(loaded);
   }, []);
 
+  const syncWebDav = useCallback(async (silent = false) => {
+    if (syncingRef.current) return;
+    const configured = await webDavService.isConfigured();
+    if (!configured) {
+      if (!silent) navigation.navigate('WebDavSettings');
+      return;
+    }
+
+    syncingRef.current = true;
+    setIsSyncing(true);
+    setHasSuccessfulSync(false);
+    try {
+      const result = await webDavService.sync();
+      const syncedTasks = result.changed
+        ? await notificationService.rescheduleTasks(result.tasks)
+        : result.tasks;
+      setTasks(syncedTasks);
+      setHasSuccessfulSync(true);
+      if (!silent) {
+        Alert.alert(
+          'WebDAV sincronizado',
+          result.uploaded || result.changed
+            ? 'As alterações locais e remotas foram mescladas.'
+            : 'As tarefas já estavam atualizadas.'
+        );
+      }
+    } catch (error) {
+      setHasSuccessfulSync(false);
+      if (!silent) Alert.alert('Falha no WebDAV', error.message);
+      else console.warn('Falha na sincronização automática WebDAV:', error);
+    } finally {
+      syncingRef.current = false;
+      setIsSyncing(false);
+    }
+  }, [navigation]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={styles.headerActions}>
+          <IconButton
+            icon="sync"
+            iconColor="#ffffff"
+            size={22}
+            disabled={isSyncing}
+            accessibilityLabel={hasSuccessfulSync ? 'WebDAV sincronizado' : 'Sincronizar WebDAV'}
+            onPress={() => syncWebDav(false)}
+            style={[
+              styles.headerIcon,
+              styles.syncStatusButton,
+              hasSuccessfulSync && styles.syncStatusButtonSuccess,
+            ]}
+          />
+          <IconButton
+            icon="cog-outline"
+            iconColor="#ffffff"
+            size={22}
+            accessibilityLabel="Configurar WebDAV"
+            onPress={() => navigation.navigate('WebDavSettings')}
+            style={styles.headerIcon}
+          />
+        </View>
+      ),
+    });
+  }, [hasSuccessfulSync, isSyncing, navigation, syncWebDav]);
+
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadTasks();
+    const unsubscribe = navigation.addListener('focus', async () => {
+      await loadTasks();
+      const config = await webDavService.getConfig();
+      setHasSuccessfulSync(await webDavService.hasSuccessfulSync());
+      if (config.autoSync && config.url && config.username && config.hasPassword) {
+        await syncWebDav(true);
+      }
     });
     return unsubscribe;
-  }, [navigation, loadTasks]);
+  }, [navigation, loadTasks, syncWebDav]);
 
   // Criação rápida sem data (equivalente ao quick_add de willdo.py)
   const handleQuickAdd = async () => {
@@ -366,15 +441,11 @@ export default function HomeScreen({ navigation }) {
                           onPress={() => toggleSubtask(item.id, s.id)}
                           color={theme.colors.primary}
                         />
-                        <Text
-                          variant="bodyMedium"
-                          style={[
-                            styles.subtaskText,
-                            s.completed && styles.subtaskTextCompleted,
-                          ]}
-                        >
-                          {s.title}
-                        </Text>
+                        <View style={styles.subtaskMarkdownContainer}>
+                          <Markdown style={s.completed ? completedSubtaskMarkdownStyles : subtaskMarkdownStyles}>
+                            {s.title}
+                          </Markdown>
+                        </View>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -409,7 +480,7 @@ export default function HomeScreen({ navigation }) {
 
       {/* Busca */}
       <Searchbar
-        placeholder="Buscar em pendentes e concluídas..."
+        placeholder="Buscar tarefas..."
         onChangeText={setSearchQuery}
         value={searchQuery}
         style={styles.searchBar}
@@ -480,6 +551,20 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIcon: {
+    margin: 0,
+  },
+  syncStatusButton: {
+    backgroundColor: '#64748b',
+    borderRadius: 18,
+  },
+  syncStatusButtonSuccess: {
+    backgroundColor: '#16a34a',
+  },
   container: {
     flex: 1,
     paddingHorizontal: 14,
@@ -559,7 +644,8 @@ const styles = StyleSheet.create({
     marginLeft: 38,
   },
   chip: {
-    height: 28,
+    minHeight: 34,
+    justifyContent: 'center',
   },
   expandedSection: {
     marginTop: 8,
@@ -581,16 +667,12 @@ const styles = StyleSheet.create({
   },
   subtaskRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 2,
   },
-  subtaskText: {
-    color: '#1e293b',
+  subtaskMarkdownContainer: {
     flex: 1,
-  },
-  subtaskTextCompleted: {
-    textDecorationLine: 'line-through',
-    color: '#94a3b8',
+    paddingRight: 4,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -631,5 +713,28 @@ const markdownStyles = {
   },
   link: {
     color: '#2563eb',
+  },
+};
+
+const subtaskMarkdownStyles = {
+  ...markdownStyles,
+  body: {
+    ...markdownStyles.body,
+    color: '#1e293b',
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  paragraph: {
+    marginTop: 3,
+    marginBottom: 3,
+  },
+};
+
+const completedSubtaskMarkdownStyles = {
+  ...subtaskMarkdownStyles,
+  body: {
+    ...subtaskMarkdownStyles.body,
+    color: '#94a3b8',
+    textDecorationLine: 'line-through',
   },
 };
