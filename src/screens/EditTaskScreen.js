@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -38,6 +38,8 @@ import {
 
 export default function EditTaskScreen({ route, navigation }) {
   const theme = useTheme();
+  const screenScrollRef = useRef(null);
+  const detailsSectionYRef = useRef(0);
   const existingTask = route.params?.task;
   const existingCustomRecurrence = parseCustomRecurrence(existingTask?.recurrence);
   const [taskId] = useState(existingTask?.id || Crypto.randomUUID());
@@ -228,6 +230,12 @@ export default function EditTaskScreen({ route, navigation }) {
         ? 'Edição anterior descartada. Agora editando a subtarefa selecionada.'
         : 'Editando a subtarefa selecionada no mesmo editor.'
     );
+    requestAnimationFrame(() => {
+      screenScrollRef.current?.scrollTo({
+        y: Math.max(0, detailsSectionYRef.current - 12),
+        animated: true,
+      });
+    });
   };
 
   const selectSubtask = (subtask) => {
@@ -287,6 +295,7 @@ export default function EditTaskScreen({ route, navigation }) {
 
   return (
     <ScrollView
+      ref={screenScrollRef}
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
@@ -439,7 +448,12 @@ export default function EditTaskScreen({ route, navigation }) {
       </Card>
 
       {/* Seção de Detalhes com Markdown */}
-      <Card style={styles.cardSection}>
+      <Card
+        style={styles.cardSection}
+        onLayout={({ nativeEvent }) => {
+          detailsSectionYRef.current = nativeEvent.layout.y;
+        }}
+      >
         <Card.Content>
           <View style={styles.markdownHeaderRow}>
             <Text variant="titleMedium" style={styles.sectionTitle}>
