@@ -39,8 +39,13 @@ import {
 export default function EditTaskScreen({ route, navigation }) {
   const theme = useTheme();
   const existingTask = route.params?.task;
-  const isEditing = Boolean(existingTask);
   const existingCustomRecurrence = parseCustomRecurrence(existingTask?.recurrence);
+  const [taskId] = useState(existingTask?.id || Crypto.randomUUID());
+  const [createdAt] = useState(existingTask?.created_at || new Date().toISOString());
+  const [isPersisted, setIsPersisted] = useState(Boolean(existingTask));
+  const [persistedDueAt, setPersistedDueAt] = useState(existingTask?.due_at || '');
+  const [notificationId, setNotificationId] = useState(existingTask?.notificationId || null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [title, setTitle] = useState(existingTask?.title || '');
   const initialDetails = existingTask?.details_md || '';
@@ -63,7 +68,7 @@ export default function EditTaskScreen({ route, navigation }) {
   const [editingSubtaskId, setEditingSubtaskId] = useState(null);
   const [editorDraft, setEditorDraft] = useState({ text: initialDetails, consumed: false });
   const [editorStatus, setEditorStatus] = useState(
-    'Escolha abaixo como o conteúdo do editor será usado.'
+    'Use os botões acima para salvar o conteúdo.'
   );
 
   // UI States
@@ -116,13 +121,84 @@ export default function EditTaskScreen({ route, navigation }) {
     setDetailsConsumed(false);
   };
 
-  const addSubtaskFromEditor = () => {
+  const persistTask = async (nextDetails, nextSubtasks) => {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      Alert.alert('Aviso', 'Digite o nome da tarefa.');
+      return false;
+    }
+
+    setIsSaving(true);
+    try {
+      const now = new Date().toISOString();
+      const finalDueAt = hasDueDate ? dueAt.toISOString() : '';
+      const dueChanged = persistedDueAt !== finalDueAt;
+      let nextNotificationId = notificationId;
+
+      if (nextNotificationId && (dueChanged || !hasDueDate)) {
+        await notificationService.cancelNotification(nextNotificationId);
+        nextNotificationId = null;
+      }
+
+      const taskData = {
+        id: taskId,
+        title: trimmedTitle,
+        details_md: nextDetails,
+        due_at: finalDueAt,
+        recurrence: hasDueDate
+          ? (isCustomRecurrence
+            ? formatCustomRecurrence(customInterval, customUnit)
+            : recurrence)
+          : 'Sem recorrência',
+        subtasks: nextSubtasks,
+        completed: existingTask?.completed || false,
+        completed_at: existingTask?.completed_at || null,
+        reminded_at: dueChanged ? null : (existingTask?.reminded_at || null),
+        created_at: createdAt,
+        updated_at: now,
+        notificationId: nextNotificationId,
+      };
+
+      if (
+        hasDueDate
+        && !taskData.completed
+        && dueAt > new Date()
+        && (!nextNotificationId || dueChanged)
+      ) {
+        nextNotificationId = await notificationService.scheduleTaskNotification(taskData);
+        taskData.notificationId = nextNotificationId;
+      }
+
+      if (isPersisted) {
+        await storageService.updateTask(taskData);
+      } else {
+        await storageService.addTask(taskData);
+        setIsPersisted(true);
+      }
+
+      setNotificationId(nextNotificationId);
+      setPersistedDueAt(finalDueAt);
+      return true;
+    } catch (error) {
+      Alert.alert('Falha ao salvar', error.message || 'Não foi possível salvar a tarefa.');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const addSubtaskFromEditor = async () => {
     const trimmed = details.trim();
     if (!trimmed) return;
-    setSubtasks([...subtasks, { id: Crypto.randomUUID(), title: trimmed, completed: false }]);
+    const nextSubtasks = [
+      ...subtasks,
+      { id: Crypto.randomUUID(), title: trimmed, completed: false },
+    ];
+    if (!await persistTask(savedDetails, nextSubtasks)) return;
+    setSubtasks(nextSubtasks);
     setDetails('');
     setDetailsConsumed(true);
-    setEditorStatus('✓ Subtarefa adicionada abaixo.');
+    setEditorStatus('✓ Subtarefa adicionada e tarefa salva.');
     setDetailsTab('edit');
   };
 
@@ -168,89 +244,45 @@ export default function EditTaskScreen({ route, navigation }) {
     }
   };
 
-  const saveEditorContent = () => {
+  const saveEditorContent = async () => {
     if (editingSubtaskId) {
       const trimmed = details.trim();
       if (!trimmed) {
         Alert.alert('Aviso', 'Escreva o conteúdo da subtarefa.');
         return;
       }
-      setSubtasks(subtasks.map(s => (
+      const nextSubtasks = subtasks.map(s => (
         s.id === editingSubtaskId ? { ...s, title: trimmed } : s
-      )));
-      finishSubtaskEdit('✓ Subtarefa atualizada.');
+      ));
+      if (!await persistTask(savedDetails, nextSubtasks)) return;
+      setSubtasks(nextSubtasks);
+      finishSubtaskEdit('✓ Subtarefa atualizada e tarefa salva.');
       return;
     }
+    if (!await persistTask(details, subtasks)) return;
     setSavedDetails(details);
     setDetailsConsumed(false);
-    setEditorStatus('✓ Descrição geral salva.');
+    setEditorStatus('✓ Descrição geral e tarefa salvas.');
   };
 
-  const toggleSubtask = (id) => {
-    setSubtasks(subtasks.map(s => s.id === id ? { ...s, completed: !s.completed } : s));
+  const toggleSubtask = async (id) => {
+    const nextSubtasks = subtasks.map(s => (
+      s.id === id ? { ...s, completed: !s.completed } : s
+    ));
+    if (!await persistTask(savedDetails, nextSubtasks)) return;
+    setSubtasks(nextSubtasks);
   };
 
-  const removeSubtask = (id) => {
-    setSubtasks(subtasks.filter(s => s.id !== id));
+  const removeSubtask = async (id) => {
+    const nextSubtasks = subtasks.filter(s => s.id !== id);
+    if (!await persistTask(savedDetails, nextSubtasks)) return;
+    setSubtasks(nextSubtasks);
     if (editingSubtaskId === id) {
       finishSubtaskEdit('Subtarefa removida.');
     }
     if (selectedSubtaskId === id) {
       setSelectedSubtaskId(null);
     }
-  };
-
-  const handleSave = async () => {
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle) {
-      Alert.alert('Aviso', 'Digite o nome da tarefa.');
-      return;
-    }
-    if (editingSubtaskId) {
-      Alert.alert('Aviso', 'Salve ou cancele a edição da subtarefa antes de salvar a tarefa.');
-      return;
-    }
-
-    const now = new Date().toISOString();
-    const finalDueAt = hasDueDate ? dueAt.toISOString() : '';
-
-    const taskData = {
-      id: existingTask?.id || Crypto.randomUUID(),
-      title: trimmedTitle,
-      details_md: detailsConsumed ? savedDetails : details,
-      due_at: finalDueAt,
-      recurrence: hasDueDate
-        ? (isCustomRecurrence
-          ? formatCustomRecurrence(customInterval, customUnit)
-          : recurrence)
-        : 'Sem recorrência',
-      subtasks,
-      completed: existingTask?.completed || false,
-      completed_at: existingTask?.completed_at || null,
-      reminded_at: existingTask?.due_at !== finalDueAt ? null : (existingTask?.reminded_at || null),
-      created_at: existingTask?.created_at || now,
-      updated_at: now,
-      notificationId: existingTask?.notificationId || null,
-    };
-
-    // Agendamento / Cancelamento de Notificações
-    if (existingTask?.notificationId && (existingTask.due_at !== finalDueAt || !hasDueDate)) {
-      await notificationService.cancelNotification(existingTask.notificationId);
-      taskData.notificationId = null;
-    }
-
-    if (hasDueDate && !taskData.completed && dueAt > new Date()) {
-      const notificationId = await notificationService.scheduleTaskNotification(taskData);
-      taskData.notificationId = notificationId;
-    }
-
-    if (isEditing) {
-      await storageService.updateTask(taskData);
-    } else {
-      await storageService.addTask(taskData);
-    }
-
-    navigation.goBack();
   };
 
   return (
@@ -469,6 +501,8 @@ export default function EditTaskScreen({ route, navigation }) {
               mode="outlined"
               icon="content-save-outline"
               onPress={saveEditorContent}
+              loading={isSaving}
+              disabled={isSaving}
             >
               {editingSubtaskId ? 'Salvar alterações da subtarefa' : 'Salvar como descrição'}
             </Button>
@@ -488,7 +522,8 @@ export default function EditTaskScreen({ route, navigation }) {
                 mode="contained"
                 icon="format-list-checks"
                 onPress={addSubtaskFromEditor}
-                disabled={!details.trim()}
+                loading={isSaving}
+                disabled={isSaving || !details.trim()}
               >
                 Adicionar como subtarefa
               </Button>
@@ -515,11 +550,28 @@ export default function EditTaskScreen({ route, navigation }) {
                 selectedSubtaskId === s.id && styles.subtaskItemSelected,
               ]}
             >
-              <Checkbox
-                status={s.completed ? 'checked' : 'unchecked'}
-                onPress={() => toggleSubtask(s.id)}
-                color={theme.colors.primary}
-              />
+              <View style={styles.subtaskActionsRow}>
+                <Checkbox
+                  status={s.completed ? 'checked' : 'unchecked'}
+                  onPress={() => toggleSubtask(s.id)}
+                  color={theme.colors.primary}
+                  disabled={isSaving}
+                />
+                <View style={styles.subtaskActionsSpacer} />
+                <IconButton
+                  icon="pencil-outline"
+                  size={20}
+                  disabled={isSaving}
+                  onPress={() => editSubtask(s, Boolean(editingSubtaskId))}
+                />
+                <IconButton
+                  icon="delete-outline"
+                  size={20}
+                  disabled={isSaving}
+                  iconColor={theme.colors.error}
+                  onPress={() => removeSubtask(s.id)}
+                />
+              </View>
               <TouchableOpacity
                 style={styles.subtaskMarkdownContainer}
                 activeOpacity={0.75}
@@ -529,32 +581,10 @@ export default function EditTaskScreen({ route, navigation }) {
                   {s.title}
                 </Markdown>
               </TouchableOpacity>
-              <IconButton
-                icon="pencil-outline"
-                size={20}
-                onPress={() => editSubtask(s, Boolean(editingSubtaskId))}
-              />
-              <IconButton
-                icon="delete-outline"
-                size={20}
-                iconColor={theme.colors.error}
-                onPress={() => removeSubtask(s.id)}
-              />
             </View>
           ))}
         </Card.Content>
       </Card>
-
-      {/* Botões de Ação */}
-      <Button
-        mode="contained"
-        onPress={handleSave}
-        style={styles.saveButton}
-        icon="content-save"
-        disabled={!title.trim()}
-      >
-        {isEditing ? 'Salvar Alterações' : 'Criar Tarefa'}
-      </Button>
 
       {/* Date & Time Pickers */}
       {showDatePicker && (
@@ -685,8 +715,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   subtaskItemRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    width: '100%',
     paddingVertical: 4,
     paddingHorizontal: 4,
     marginTop: 8,
@@ -695,20 +724,24 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#ffffff',
   },
+  subtaskActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 42,
+  },
+  subtaskActionsSpacer: {
+    flex: 1,
+  },
   subtaskItemSelected: {
     borderColor: '#2563eb',
     borderWidth: 2,
     backgroundColor: '#eff6ff',
   },
   subtaskMarkdownContainer: {
-    flex: 1,
-    paddingHorizontal: 4,
+    width: '100%',
+    paddingHorizontal: 10,
+    paddingBottom: 6,
     minHeight: 42,
-  },
-  saveButton: {
-    marginTop: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
   },
 });
 

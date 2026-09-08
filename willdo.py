@@ -133,16 +133,28 @@ QPushButton#syncButton {
     background: #f8fafc;
     color: #475569;
     border: 1px solid #cbd5e1;
-    padding: 5px 10px;
-    font-size: 12px;
+    border-radius: 17px;
+    padding: 0;
+    font-size: 20px;
+    font-weight: 700;
 }
 QPushButton#syncButton:hover {
     background: #f1f5f9;
+    border: 2px solid #94a3b8;
+}
+QPushButton#syncButton:pressed {
+    background: #cbd5e1;
 }
 QPushButton#syncButton[synced="true"] {
     background: #16a34a;
     color: white;
     border-color: #15803d;
+}
+QPushButton#syncButton[synced="true"]:hover {
+    background: #15803d;
+}
+QPushButton#syncButton[synced="true"]:pressed {
+    background: #166534;
 }
 QPushButton:disabled {
     background: #f1f5f9;
@@ -1122,7 +1134,7 @@ class TodoApp(QWidget):
         self.edit_button = QPushButton("Editar", self)
         self.complete_button = QPushButton("Concluir", self)
         self.delete_button = QPushButton("Excluir", self)
-        self.sync_button = QPushButton("↻ Sync", self)
+        self.sync_button = QPushButton("↻", self)
         self.clear_completed_button = QPushButton("Excluir concluídas", self)
         self.change_dir_button = QPushButton("Alterar diretório", self)
         self.help_button = QPushButton("Ajuda e privacidade", self)
@@ -1174,6 +1186,7 @@ class TodoApp(QWidget):
         about_action.triggered.connect(self.show_about)
         self.help_button.setObjectName("ghostButton")
         self.help_button.setMenu(help_menu)
+        header.addWidget(self.sync_button)
         header.addWidget(self.help_button)
         layout.addLayout(header)
 
@@ -1199,14 +1212,14 @@ class TodoApp(QWidget):
         self.clear_completed_button.setObjectName("ghostButton")
         self.sync_button.setObjectName("syncButton")
         self.sync_button.setProperty("synced", False)
-        self.sync_button.setMaximumWidth(110)
-        self.sync_button.setToolTip("Recarregar as tarefas do task.json")
+        self.sync_button.setFixedSize(36, 36)
+        self.sync_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sync_button.setToolTip("Sincronizar tarefas")
         buttons.addWidget(self.add_button)
         buttons.addWidget(self.edit_button)
         buttons.addWidget(self.complete_button)
         buttons.addWidget(self.delete_button)
         buttons.addStretch()
-        buttons.addWidget(self.sync_button)
         buttons.addWidget(self.clear_completed_button)
         layout.addLayout(buttons)
 
@@ -1319,9 +1332,16 @@ class TodoApp(QWidget):
     def manual_sync(self) -> None:
         if not self.store:
             return
+        self.set_sync_pending("Sincronizando tarefas...")
+        self.sync_button.setEnabled(False)
+        self.sync_button.setToolTip("Sincronizando...")
+        QApplication.processEvents()
         tasks_file = self.store.tasks_file
         loaded = self.store.load()
         if not loaded:
+            self.sync_button.setEnabled(True)
+            self.sync_button.setToolTip("Sincronizar tarefas")
+            self.set_sync_pending("Falha ao sincronizar o task.json.")
             QMessageBox.warning(
                 self,
                 "Falha na sincronização",
@@ -1330,13 +1350,22 @@ class TodoApp(QWidget):
             return
         self.notified_task_ids.intersection_update(task.id for task in self.store.tasks)
         self.load_tasks_into_ui()
+        self.sync_button.setEnabled(True)
+        self.sync_button.setToolTip("Sincronizar novamente")
         self.set_sync_success(
             f"{len(self.store.tasks)} tarefa(s) sincronizada(s) de: {tasks_file.name}"
         )
 
     def set_sync_success(self, message: str) -> None:
-        self.sync_button.setText("✓ Atualizado")
+        self.sync_button.setText("↻")
         self.sync_button.setProperty("synced", True)
+        self.sync_button.style().unpolish(self.sync_button)
+        self.sync_button.style().polish(self.sync_button)
+        self.status_label.setText(message)
+
+    def set_sync_pending(self, message: str) -> None:
+        self.sync_button.setText("↻")
+        self.sync_button.setProperty("synced", False)
         self.sync_button.style().unpolish(self.sync_button)
         self.sync_button.style().polish(self.sync_button)
         self.status_label.setText(message)
@@ -1371,7 +1400,7 @@ class TodoApp(QWidget):
             return
         selected_task_id = self.get_selected_task_id()
         if not self.store.load():
-            self.status_label.setText("Aguardando o término da sincronização externa...")
+            self.set_sync_pending("Aguardando o término da sincronização externa...")
             return
         current_ids = {task.id for task in self.store.tasks}
         self.notified_task_ids.intersection_update(current_ids)
