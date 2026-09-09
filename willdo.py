@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from PyQt6.QtCore import Qt, QDateTime, QTimer, QLocale, QSize, QPoint, QEvent, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QTextCharFormat, QTextCursor, QTextDocument, QTextListFormat
+from PyQt6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QIcon, QTextCharFormat, QTextCursor, QTextDocument, QTextListFormat
 from PyQt6.QtWidgets import (
     QApplication,
     QWidget,
@@ -45,6 +45,8 @@ from PyQt6.QtWidgets import (
 
 APP_DIR = Path.home() / ".willdo"
 CONFIG_FILE = APP_DIR / "config.json"
+APP_ICON = Path(__file__).resolve().parent / "assets" / "icon.png"
+CHECK_ICON = Path(__file__).resolve().parent / "assets" / "check-white.svg"
 TASKS_FILENAME = "task.json"
 DATE_FMT = "%d/%m/%Y %H:%M"
 DISPLAY_DATE_FMT = "dd/MM/yyyy HH:mm"
@@ -68,89 +70,113 @@ BASE_STYLESHEET = """
 QWidget {
     font-family: Arial;
     font-size: 14px;
-    color: #111827;
-    background: #f5f7fb;
+    color: #f5f5f5;
+    background: #090909;
 }
-QLineEdit, QTextEdit, QComboBox, QDateTimeEdit, QListWidget {
+QLineEdit, QTextEdit, QTextBrowser, QComboBox, QDateTimeEdit, QSpinBox, QListWidget {
     padding: 8px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    background: white;
+    color: #f5f5f5;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    background: #151515;
+    selection-background-color: #404040;
+    selection-color: #ffffff;
 }
-QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateTimeEdit:focus, QListWidget:focus {
-    border: 1px solid #3b82f6;
+QLineEdit:focus, QTextEdit:focus, QTextBrowser:focus, QComboBox:focus, QDateTimeEdit:focus, QSpinBox:focus, QListWidget:focus {
+    border: 1px solid #a3a3a3;
 }
 QPushButton {
-    background: #2563eb;
-    color: white;
-    border: none;
-    border-radius: 6px;
+    background: #f5f5f5;
+    color: #0a0a0a;
+    border: 1px solid #f5f5f5;
+    border-radius: 8px;
     padding: 8px 12px;
     font-weight: 600;
 }
 QPushButton:hover {
-    background: #1d4ed8;
+    background: #d4d4d4;
+    border-color: #d4d4d4;
 }
 QPushButton#ghostButton {
     background: transparent;
-    color: #475569;
+    color: #b5b5b5;
     border: 1px solid transparent;
 }
 QPushButton#ghostButton:hover {
-    background: #e2e8f0;
+    background: #222222;
+    color: #f5f5f5;
 }
 QPushButton#smallButton {
+    background: #222222;
+    color: #f5f5f5;
+    border: 1px solid #404040;
     padding: 5px 10px;
     font-size: 12px;
 }
+QPushButton#smallButton:hover {
+    background: #303030;
+    border-color: #525252;
+}
 QPushButton#smallDangerButton {
-    background: white;
-    color: #dc2626;
-    border: 1px solid #fecaca;
+    background: #1f1111;
+    color: #f87171;
+    border: 1px solid #7f1d1d;
     padding: 5px 10px;
     font-size: 12px;
 }
 QPushButton#smallDangerButton:hover {
-    background: #fef2f2;
+    background: #301515;
 }
 QPushButton#secondaryButton {
-    background: white;
-    color: #1e40af;
-    border: 1px solid #bfdbfe;
+    background: #151515;
+    color: #f5f5f5;
+    border: 1px solid #4a4a4a;
 }
 QPushButton#secondaryButton:hover {
-    background: #eff6ff;
-    border-color: #60a5fa;
+    background: #242424;
+    border-color: #737373;
 }
 QPushButton#dangerButton {
-    background: white;
-    color: #dc2626;
-    border: 1px solid #fecaca;
+    background: #1f1111;
+    color: #f87171;
+    border: 1px solid #7f1d1d;
 }
 QPushButton#dangerButton:hover {
-    background: #fef2f2;
-    border-color: #f87171;
+    background: #301515;
+    border-color: #ef4444;
 }
-QPushButton#syncButton {
-    background: #f8fafc;
-    color: #475569;
-    border: 1px solid #cbd5e1;
-    border-radius: 17px;
+QPushButton#headerButton, QPushButton#syncButton {
+    background: #202020;
+    color: #f5f5f5;
+    border: 1px solid #3a3a3a;
+    border-radius: 18px;
     padding: 0;
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
 }
-QPushButton#syncButton:hover {
-    background: #f1f5f9;
-    border: 2px solid #94a3b8;
+QPushButton#headerButton:hover, QPushButton#syncButton:hover {
+    background: #303030;
+    border-color: #737373;
+}
+QPushButton#headerButton[active="true"] {
+    background: #f5f5f5;
+    color: #090909;
+    border-color: #f5f5f5;
+}
+QPushButton::menu-indicator {
+    image: none;
+    width: 0;
+}
+QPushButton#syncButton {
+    background: #525252;
 }
 QPushButton#syncButton:pressed {
-    background: #cbd5e1;
+    background: #404040;
 }
 QPushButton#syncButton[synced="true"] {
     background: #16a34a;
-    color: white;
-    border-color: #15803d;
+    color: #ffffff;
+    border-color: #22c55e;
 }
 QPushButton#syncButton[synced="true"]:hover {
     background: #15803d;
@@ -159,14 +185,14 @@ QPushButton#syncButton[synced="true"]:pressed {
     background: #166534;
 }
 QPushButton:disabled {
-    background: #f1f5f9;
-    color: #94a3b8;
-    border-color: #e2e8f0;
+    background: #171717;
+    color: #525252;
+    border-color: #292929;
 }
 QListWidget {
-    background: #f8fafc;
+    background: #090909;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 8px;
     outline: none;
 }
@@ -179,59 +205,108 @@ QListWidget::item:selected {
     background: transparent;
 }
 QTabWidget::pane {
-    border: 1px solid #dbe3ec;
-    border-radius: 8px;
-    background: white;
+    border: 1px solid #292929;
+    border-radius: 10px;
+    background: #090909;
 }
 QTabBar::tab {
-    background: #dbe3ec;
-    color: #334155;
+    background: #171717;
+    color: #a3a3a3;
     padding: 8px 14px;
     margin-right: 3px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid #303030;
     border-bottom: none;
     border-top-left-radius: 8px;
     border-top-right-radius: 8px;
 }
 QTabBar::tab:hover {
-    background: #e2e8f0;
+    background: #222222;
 }
 QTabBar::tab:selected {
-    background: white;
-    color: #0f172a;
+    background: #151515;
+    color: #f5f5f5;
     font-weight: 700;
-    border: 1px solid #cbd5e1;
-    border-bottom: 1px solid white;
+    border: 1px solid #4a4a4a;
+    border-bottom: 1px solid #151515;
     margin-bottom: -1px;
 }
 QLabel#mutedLabel {
-    color: #64748b;
+    color: #a3a3a3;
     font-size: 12px;
     background: transparent;
 }
 QLabel#dateLabel {
-    color: #334155;
+    color: #d4d4d4;
     font-weight: 700;
     font-size: 12px;
     background: transparent;
 }
 QLabel#sectionLabel {
-    color: #334155;
+    color: #b5b5b5;
     font-size: 12px;
     font-weight: 700;
     background: transparent;
 }
 QLabel#appTitle {
-    color: #0f172a;
+    color: #f5f5f5;
     font-size: 24px;
     font-weight: 700;
     background: transparent;
 }
 QLabel#appSubtitle {
-    color: #64748b;
+    color: #a3a3a3;
     font-size: 12px;
     background: transparent;
 }
+QMenu {
+    background: #171717;
+    color: #f5f5f5;
+    border: 1px solid #3a3a3a;
+    padding: 5px;
+}
+QMenu::item {
+    padding: 7px 22px 7px 10px;
+    border-radius: 5px;
+}
+QMenu::item:selected {
+    background: #303030;
+}
+QScrollBar:vertical {
+    background: #101010;
+    width: 10px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #404040;
+    min-height: 30px;
+    border-radius: 5px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #525252;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    height: 0;
+    background: transparent;
+}
+"""
+
+CHECKBOX_STYLESHEET = f"""
+QCheckBox::indicator {{
+    width: 16px;
+    height: 16px;
+    border: 1px solid #737373;
+    border-radius: 4px;
+    background: #151515;
+}}
+QCheckBox::indicator:hover {{
+    border-color: #d4d4d4;
+}}
+QCheckBox::indicator:checked {{
+    background: #22c55e;
+    border-color: #22c55e;
+    image: url("{CHECK_ICON.as_posix()}");
+}}
 """
 
 def ensure_app_dir() -> None:
@@ -297,7 +372,7 @@ def clean_details_text(text: str) -> str:
 
 def markdown_to_html(md: str) -> str:
     if not md.strip():
-        return "<p style='color:#94a3b8;'>Sem preview.</p>"
+        return "<p style='color:#737373;'>Sem conteúdo.</p>"
 
     lines = md.splitlines()
     out = []
@@ -346,15 +421,15 @@ def markdown_to_html(md: str) -> str:
     <html>
     <head>
       <style>
-        body {{ font-family: Arial; color:#111827; line-height:1.45; }}
-        h1,h2,h3 {{ color:#0f172a; margin:8px 0 6px 0; }}
+        body {{ font-family: Arial; color:#e5e5e5; background:#101010; line-height:1.45; }}
+        h1,h2,h3 {{ color:#fafafa; margin:8px 0 6px 0; }}
         p {{ margin:6px 0; }}
         ul {{ margin:6px 0 6px 18px; padding:0; }}
         li {{ margin:4px 0; }}
-        code {{ background:#eef2ff; padding:2px 4px; border-radius:4px; }}
+        code {{ background:#2a2a2a; padding:2px 4px; border-radius:4px; }}
         strong {{ font-weight:700; }}
         em {{ font-style:italic; }}
-        a {{ color:#2563eb; text-decoration:none; }}
+        a {{ color:#86efac; text-decoration:none; }}
       </style>
     </head>
     <body>{body}</body>
@@ -476,21 +551,21 @@ def task_details_to_html(task: Task) -> str:
     body = "".join(sections)
     return f"""
     <html><head><style>
-      body {{ font-family:Arial; color:#1e293b; line-height:1.4; margin:4px; }}
-      .section-title {{ color:#64748b; font-size:11px; font-weight:700; margin:6px 0; }}
+      body {{ font-family:Arial; color:#e5e5e5; background:#101010; line-height:1.4; margin:4px; }}
+      .section-title {{ color:#a3a3a3; font-size:11px; font-weight:700; margin:6px 0; }}
       .description {{ margin-bottom:10px; }}
-      .subtask {{ border:1px solid #e2e8f0; border-radius:7px; padding:7px 9px; margin:6px 0; }}
-      .subtask.completed {{ color:#94a3b8; text-decoration:line-through; }}
-      .state {{ color:#64748b; font-size:11px; font-weight:700; margin-bottom:3px; }}
-      .check {{ color:#2563eb; font-size:17px; text-decoration:none; }}
+      .subtask {{ border:1px solid #303030; border-radius:7px; padding:7px 9px; margin:6px 0; background:#151515; }}
+      .subtask.completed {{ color:#737373; text-decoration:line-through; }}
+      .state {{ color:#a3a3a3; font-size:11px; font-weight:700; margin-bottom:3px; }}
+      .check {{ color:#86efac; font-size:17px; text-decoration:none; }}
       h1 {{ font-size:20px; margin:5px 0; }}
       h2 {{ font-size:17px; margin:5px 0; }}
       h3 {{ font-size:15px; margin:4px 0; }}
       p {{ margin:4px 0; }}
       ul {{ margin:4px 0 4px 18px; padding:0; }}
       li {{ margin:2px 0; }}
-      a {{ color:#2563eb; text-decoration:underline; }}
-      code {{ background:#eef2ff; padding:2px 4px; }}
+      a {{ color:#86efac; text-decoration:underline; }}
+      code {{ background:#2a2a2a; padding:2px 4px; }}
     </style></head><body>{body}</body></html>
     """
 
@@ -744,8 +819,8 @@ class SubTaskRow(QWidget):
 
     def update_style(self) -> None:
         checked = self.checkbox.isChecked()
-        background = "#eff6ff" if self._selected else "#ffffff"
-        border = "#2563eb" if self._selected else "#e2e8f0"
+        background = "#242424" if self._selected else "#151515"
+        border = "#a3a3a3" if self._selected else "#303030"
         border_width = 2 if self._selected else 1
         self.setStyleSheet(
             f"#subtaskCard {{ background:{background}; border:{border_width}px solid {border}; border-radius:8px; }}"
@@ -753,13 +828,13 @@ class SubTaskRow(QWidget):
         font = self.title_label.font()
         font.setStrikeOut(checked)
         self.title_label.setFont(font)
-        color = "#94a3b8" if checked else "#1e293b"
+        color = "#737373" if checked else "#e5e5e5"
         self.title_label.setStyleSheet(f"color:{color};background:transparent;border:none;")
         rendered = markdown_to_html(self._title)
         if checked:
             rendered = rendered.replace(
                 "body {",
-                "body { color:#94a3b8; text-decoration:line-through;",
+                "body { color:#737373; text-decoration:line-through;",
                 1,
             )
         self.title_label.setText(rendered)
@@ -814,6 +889,9 @@ class TaskEditorDialog(QDialog):
         self.title_input.setPlaceholderText("Digite a tarefa...")
         layout.addWidget(self.title_input)
 
+        self.save_task_button = QPushButton("Salvar tarefa")
+        self.save_task_button.clicked.connect(self.save_task_and_close)
+
         self.use_date_checkbox = QCheckBox("Definir data e hora")
         self.use_date_checkbox.toggled.connect(self.update_due_enabled)
         layout.addWidget(self.use_date_checkbox)
@@ -839,6 +917,7 @@ class TaskEditorDialog(QDialog):
         recurrence_row.addWidget(self.custom_interval, stretch=1)
         recurrence_row.addWidget(self.custom_unit, stretch=1)
         layout.addLayout(recurrence_row)
+        layout.addWidget(self.save_task_button)
 
         toolbar = QHBoxLayout()
         self.bold_button = QPushButton("N")
@@ -847,7 +926,7 @@ class TaskEditorDialog(QDialog):
         self.bold_button.clicked.connect(self.toggle_bold)
         self.italic_button = QPushButton("I")
         self.italic_button.setObjectName("smallButton")
-        self.italic_button.setStyleSheet("font-weight:700;")
+        self.italic_button.setStyleSheet("font-style:italic;font-weight:600;")
         self.italic_button.clicked.connect(self.toggle_italic)
         self.list_button = QPushButton("Lista")
         self.list_button.setObjectName("smallButton")
@@ -951,7 +1030,7 @@ class TaskEditorDialog(QDialog):
         self.update_due_enabled()
         self.update_custom_recurrence_visibility()
         self.update_subtask_actions()
-        self.setStyleSheet(BASE_STYLESHEET)
+        self.setStyleSheet(BASE_STYLESHEET + CHECKBOX_STYLESHEET)
 
     def restore_parent_window(self) -> None:
         parent = self.parentWidget()
@@ -970,13 +1049,15 @@ class TaskEditorDialog(QDialog):
 
     def update_due_enabled(self) -> None:
         enabled = self.use_date_checkbox.isChecked()
-        self.datetime_picker.setEnabled(enabled)
-        self.recurrence_box.setEnabled(enabled)
-        self.custom_interval.setEnabled(enabled)
-        self.custom_unit.setEnabled(enabled)
+        self.datetime_picker.setVisible(enabled)
+        self.recurrence_box.setVisible(enabled)
+        self.update_custom_recurrence_visibility()
 
     def update_custom_recurrence_visibility(self) -> None:
-        visible = self.recurrence_box.currentText() == "Personalizado"
+        visible = (
+            self.use_date_checkbox.isChecked()
+            and self.recurrence_box.currentText() == "Personalizado"
+        )
         self.custom_interval.setVisible(visible)
         self.custom_unit.setVisible(visible)
 
@@ -1079,7 +1160,7 @@ class TaskEditorDialog(QDialog):
         char_format = QTextCharFormat()
         char_format.setAnchor(True)
         char_format.setAnchorHref(url.strip())
-        char_format.setForeground(QColor("#2563eb"))
+        char_format.setForeground(QColor("#86efac"))
         char_format.setFontUnderline(True)
         cursor.mergeCharFormat(char_format)
         self.details_edit.setFocus()
@@ -1113,6 +1194,12 @@ class TaskEditorDialog(QDialog):
         self.editor_was_consumed = False
         self.persist_changes("✓ Descrição geral e tarefa salvas.")
 
+    def save_task_and_close(self) -> None:
+        if not self.editor_was_consumed:
+            self.description_md = self.editor_markdown()
+        if self.persist_changes("✓ Tarefa salva."):
+            self.accept()
+
     def add_subtask_from_editor(self) -> None:
         content = self.editor_markdown().strip()
         if not content:
@@ -1142,6 +1229,7 @@ class TaskEditorDialog(QDialog):
 
     def finish_subtask_edit(self, status: str) -> None:
         self.editing_subtask_item = None
+        self.save_task_button.setEnabled(True)
         self.save_description_button.setText("Salvar como descrição")
         self.add_subtask_button.show()
         self.cancel_subtask_edit_button.hide()
@@ -1265,6 +1353,7 @@ class TaskEditorDialog(QDialog):
         if not row:
             return
         self.editing_subtask_item = item
+        self.save_task_button.setEnabled(False)
         self.save_description_button.setText("Salvar alterações da subtarefa")
         self.add_subtask_button.hide()
         self.cancel_subtask_edit_button.show()
@@ -1359,14 +1448,21 @@ class TodoApp(QWidget):
 
         self.quick_add_input = QLineEdit(self)
         self.search_input = QLineEdit(self)
-        self.add_button = QPushButton("+ Nova tarefa", self)
+        self.add_button = QPushButton("+", self)
+        self.quick_button = QPushButton("⚡", self)
+        self.search_button = QPushButton(self)
+        search_icon = QIcon.fromTheme("edit-find")
+        if search_icon.isNull():
+            self.search_button.setText("⌕")
+        else:
+            self.search_button.setIcon(search_icon)
         self.edit_button = QPushButton("Editar", self)
         self.complete_button = QPushButton("Concluir", self)
         self.delete_button = QPushButton("Excluir", self)
         self.sync_button = QPushButton("↻", self)
         self.clear_completed_button = QPushButton("Excluir concluídas", self)
         self.change_dir_button = QPushButton("Alterar diretório", self)
-        self.help_button = QPushButton("Ajuda e privacidade", self)
+        self.help_button = QPushButton("?", self)
         self.status_label = QLabel(self)
 
         self.tabs = QTabWidget(self)
@@ -1383,7 +1479,9 @@ class TodoApp(QWidget):
         self.restore_window_geometry()
 
     def setup_ui(self) -> None:
-        self.setWindowTitle("WillDo")
+        self.setWindowTitle("Faz agora!")
+        if APP_ICON.exists():
+            self.setWindowIcon(QIcon(str(APP_ICON)))
         self.setMinimumSize(940, 660)
         self.resize(940, 660)
 
@@ -1394,7 +1492,7 @@ class TodoApp(QWidget):
         header = QHBoxLayout()
         brand = QVBoxLayout()
         brand.setSpacing(0)
-        app_title = QLabel("WillDo")
+        app_title = QLabel("Faz agora!")
         app_title.setObjectName("appTitle")
         app_subtitle = QLabel("Suas tarefas no Debian e no Android")
         app_subtitle.setObjectName("appSubtitle")
@@ -1408,28 +1506,41 @@ class TodoApp(QWidget):
         webdav_action = help_menu.addAction("Como configurar o WebDAV")
         privacy_action = help_menu.addAction("Privacidade")
         help_menu.addSeparator()
-        about_action = help_menu.addAction("Sobre o WillDo")
+        about_action = help_menu.addAction("Sobre o Faz agora!")
         first_steps_action.triggered.connect(self.show_first_steps)
         webdav_action.triggered.connect(self.show_webdav_help)
         privacy_action.triggered.connect(self.show_privacy)
         about_action.triggered.connect(self.show_about)
-        self.help_button.setObjectName("ghostButton")
+        for button in (self.add_button, self.quick_button, self.search_button, self.help_button):
+            button.setObjectName("headerButton")
+            button.setProperty("active", False)
+            button.setFixedSize(36, 36)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.help_button.setMenu(help_menu)
+        header.addWidget(self.add_button)
+        header.addWidget(self.quick_button)
+        header.addWidget(self.search_button)
         header.addWidget(self.sync_button)
         header.addWidget(self.help_button)
         layout.addLayout(header)
 
-        self.quick_add_input.setPlaceholderText("Digite a tarefa e aperte Enter... (cria sem data)")
+        self.quick_add_input.setPlaceholderText("Crie rápido, edite depois.")
         self.quick_add_input.returnPressed.connect(self.quick_add_task)
+        self.quick_add_input.setClearButtonEnabled(True)
+        self.quick_add_input.hide()
         layout.addWidget(self.quick_add_input)
 
-        self.search_input.setPlaceholderText("Buscar em pendentes e concluídas...")
+        self.search_input.setPlaceholderText("Buscar tarefas...")
         self.search_input.textChanged.connect(self.apply_filter)
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.hide()
         layout.addWidget(self.search_input)
 
         buttons = QHBoxLayout()
         buttons.setSpacing(8)
         self.add_button.clicked.connect(self.add_task)
+        self.quick_button.clicked.connect(self.toggle_quick_add)
+        self.search_button.clicked.connect(self.toggle_search)
         self.edit_button.clicked.connect(self.edit_selected_task)
         self.complete_button.clicked.connect(self.complete_selected_task)
         self.delete_button.clicked.connect(self.delete_selected_task)
@@ -1444,7 +1555,6 @@ class TodoApp(QWidget):
         self.sync_button.setFixedSize(36, 36)
         self.sync_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.sync_button.setToolTip("Sincronizar tarefas")
-        buttons.addWidget(self.add_button)
         buttons.addWidget(self.edit_button)
         buttons.addWidget(self.complete_button)
         buttons.addWidget(self.delete_button)
@@ -1481,17 +1591,48 @@ class TodoApp(QWidget):
         layout.addLayout(bottom)
 
         self.setLayout(layout)
-        self.setStyleSheet(BASE_STYLESHEET)
+        self.setStyleSheet(BASE_STYLESHEET + CHECKBOX_STYLESHEET)
         self.update_action_buttons()
+
+    def set_compact_panel(self, panel: Optional[str]) -> None:
+        quick_active = panel == "quick"
+        search_active = panel == "search"
+
+        self.quick_add_input.setVisible(quick_active)
+        self.search_input.setVisible(search_active)
+        if not quick_active:
+            self.quick_add_input.clear()
+        if not search_active:
+            self.search_input.clear()
+
+        for button, active in (
+            (self.quick_button, quick_active),
+            (self.search_button, search_active),
+        ):
+            button.setProperty("active", active)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+        if quick_active:
+            self.quick_add_input.setFocus()
+        elif search_active:
+            self.search_input.setFocus()
+
+    def toggle_quick_add(self) -> None:
+        self.set_compact_panel(None if self.quick_add_input.isVisible() else "quick")
+
+    def toggle_search(self) -> None:
+        self.set_compact_panel(None if self.search_input.isVisible() else "search")
 
     def show_first_steps(self) -> None:
         QMessageBox.information(
             self,
             "Primeiros passos",
-            "1. Digite uma tarefa no campo superior e pressione Enter.\n"
-            "2. Para adicionar data, recorrência, notas ou subtarefas, use + Nova tarefa.\n"
-            "3. Clique uma vez em uma tarefa para selecioná-la.\n"
-            "4. Use Editar, Concluir ou Excluir. Dois cliques também abrem o editor.",
+            "1. Use + para criar uma tarefa completa.\n"
+            "2. Use ⚡ para criar rapidamente uma tarefa sem data.\n"
+            "3. Use a lupa para buscar em pendentes e concluídas.\n"
+            "4. Clique uma vez em uma tarefa para selecioná-la.\n"
+            "5. Use Editar, Concluir ou Excluir. Dois cliques também abrem o editor.",
         )
 
     def show_webdav_help(self) -> None:
@@ -1499,12 +1640,18 @@ class TodoApp(QWidget):
         QMessageBox.information(
             self,
             "Configuração WebDAV",
-            "O WillDo para Debian usa uma pasta WebDAV já montada pelo sistema.\n\n"
-            "1. Monte seu servidor WebDAV no gerenciador de arquivos.\n"
-            "2. Clique em Alterar diretório e escolha essa pasta.\n"
-            f"3. O desktop e o Android devem usar o mesmo arquivo {TASKS_FILENAME}.\n"
-            "4. No Android, informe a URL completa desse arquivo.\n\n"
-            f"Arquivo atual:\n{tasks_file}",
+            "O Faz agora! usa o mesmo arquivo no Debian e no Android. Assim, as tarefas "
+            "criadas em um dispositivo aparecem no outro.\n\n"
+            "No Debian:\n"
+            "1. Conecte sua pasta WebDAV pelo gerenciador de arquivos.\n"
+            "2. Clique em Alterar diretório e escolha a pasta WebDAV montada.\n"
+            f"3. O arquivo {TASKS_FILENAME} será criado automaticamente no primeiro uso.\n\n"
+            "No Android:\n"
+            "1. Abra as configurações pelo símbolo da engrenagem.\n"
+            "2. Informe a URL do seu servidor WebDAV, o usuário e a senha.\n"
+            "3. Toque em Salvar e sincronizar.\n\n"
+            "Os dois aplicativos devem apontar para a mesma pasta WebDAV.\n\n"
+            f"Local configurado neste computador:\n{tasks_file}",
         )
 
     def show_privacy(self) -> None:
@@ -1520,14 +1667,22 @@ class TodoApp(QWidget):
     def show_about(self) -> None:
         QMessageBox.information(
             self,
-            "Sobre o WillDo",
-            "WillDo Desktop 1.5\n\n"
-            "Gerenciador de tarefas integrado ao WillDo para Android por meio do seu próprio WebDAV.",
+            "Sobre o Faz agora!",
+            "Faz agora! Desktop 2.0\n\n"
+            "Gerenciador de tarefas integrado ao Faz agora! para Android por meio do seu próprio WebDAV.",
         )
 
     def prepare_store(self) -> bool:
         tasks_dir = self.config.get_tasks_dir()
         if tasks_dir is None:
+            QMessageBox.information(
+                self,
+                "Onde guardar suas tarefas",
+                "Escolha a pasta em que o Faz agora! salvará suas tarefas.\n\n"
+                "Para usar somente este computador, escolha uma pasta local. Para sincronizar "
+                "com o Android, conecte primeiro sua pasta WebDAV pelo gerenciador de arquivos "
+                "e escolha essa pasta. O task.json será criado automaticamente.",
+            )
             selected = QFileDialog.getExistingDirectory(
                 self,
                 "Escolha onde salvar suas tarefas",
@@ -1539,8 +1694,40 @@ class TodoApp(QWidget):
                 return False
             tasks_dir = Path(selected)
             self.config.set_tasks_dir(tasks_dir)
+        elif not tasks_dir.is_dir():
+            QMessageBox.warning(
+                self,
+                "Pasta WebDAV indisponível",
+                "A pasta usada anteriormente não está disponível neste momento.\n\n"
+                "Se ela estiver no WebDAV, conecte o servidor novamente pelo gerenciador "
+                "de arquivos. Depois, selecione a pasta montada. Nenhuma tarefa será apagada.",
+            )
+            selected = QFileDialog.getExistingDirectory(
+                self,
+                "Selecione novamente a pasta de tarefas",
+                str(Path.home()),
+                QFileDialog.Option.ShowDirsOnly,
+            )
+            if not selected:
+                QMessageBox.information(
+                    self,
+                    "Pasta não alterada",
+                    "A pasta anterior foi mantida. Reconecte o WebDAV e abra o aplicativo novamente.",
+                )
+                return False
+            tasks_dir = Path(selected)
+            self.config.set_tasks_dir(tasks_dir)
+
         tasks_file = tasks_dir / TASKS_FILENAME
-        self.store = TaskStore(tasks_file)
+        try:
+            self.store = TaskStore(tasks_file)
+        except OSError as error:
+            QMessageBox.critical(
+                self,
+                "Não foi possível abrir a pasta",
+                f"O Faz agora! não conseguiu acessar:\n{tasks_dir}\n\n{error}",
+            )
+            return False
         self.status_label.setText(f"Salvando em: {tasks_file}")
         return True
 
@@ -1711,7 +1898,7 @@ class TodoApp(QWidget):
         self.store.add(task)
         self.quick_add_input.clear()
         self.load_tasks_into_ui(selected_task_id=task.id, switch_to_completed=False)
-        self.quick_add_input.setFocus()
+        self.set_compact_panel(None)
         self.status_label.setText("Tarefa criada sem data.")
 
     def add_task(self) -> None:
@@ -1957,7 +2144,7 @@ class TodoApp(QWidget):
                 lambda value, task_id=task.id: self.details_scroll_positions.__setitem__(task_id, value)
             )
             details_browser.setStyleSheet(
-                "QTextBrowser { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px; }"
+                "QTextBrowser { color:#e5e5e5; background:#101010; border:1px solid #303030; border-radius:8px; padding:8px; }"
             )
             details_browser.setHtml(task_details_to_html(task))
             row.details_browser = details_browser
@@ -2121,17 +2308,17 @@ class TodoApp(QWidget):
         query = self.search_input.text().strip().lower()
 
         if task.completed:
-            bg = "#f8fafc"
-            border = "#d1d5db"
-            title_style = "color:#6b7280;font-weight:600;text-decoration: line-through;background:transparent;border:none;"
-            subtitle_style = "color:#94a3b8;background:transparent;border:none;"
-            date_style = "color:#94a3b8;font-weight:700;background:transparent;border:none;"
+            bg = "#101010"
+            border = "#292929"
+            title_style = "color:#737373;font-weight:600;text-decoration: line-through;background:transparent;border:none;"
+            subtitle_style = "color:#737373;background:transparent;border:none;"
+            date_style = "color:#737373;font-weight:700;background:transparent;border:none;"
         else:
-            bg = "#ffffff"
-            border = "#e5e7eb"
-            title_style = "color:#111827;font-weight:700;background:transparent;border:none;"
-            subtitle_style = "color:#64748b;background:transparent;border:none;"
-            date_style = "color:#334155;font-weight:700;background:transparent;border:none;"
+            bg = "#151515"
+            border = "#292929"
+            title_style = "color:#f5f5f5;font-weight:700;background:transparent;border:none;"
+            subtitle_style = "color:#a3a3a3;background:transparent;border:none;"
+            date_style = "color:#d4d4d4;font-weight:700;background:transparent;border:none;"
 
         if query:
             haystack = " ".join([
@@ -2143,12 +2330,12 @@ class TodoApp(QWidget):
                 "concluída" if task.completed else "pendente",
             ])
             if query in haystack:
-                border = "#3b82f6"
-                bg = "#eff6ff"
+                border = "#737373"
+                bg = "#202020"
 
         if selected:
-            border = "#2563eb"
-            bg = "#eff6ff"
+            border = "#a3a3a3"
+            bg = "#242424"
 
         border_width = 2 if selected else 1
         row.setStyleSheet(
@@ -2169,7 +2356,7 @@ class TodoApp(QWidget):
         pending_count = len([task for task in self.store.tasks if not task.completed])
         completed_count = len(self.store.tasks) - pending_count
         if pending_count == 0:
-            self.add_empty_state(self.pending_list, "Tudo em dia por aqui. Crie uma tarefa no campo acima.")
+            self.add_empty_state(self.pending_list, "Tudo em dia por aqui. Use + ou ⚡ para criar uma tarefa.")
         if completed_count == 0:
             self.add_empty_state(self.completed_list, "As tarefas concluídas aparecerão aqui.")
         self.tabs.setTabText(0, f"Pendentes ({pending_count})")
@@ -2426,13 +2613,15 @@ class TodoApp(QWidget):
             self.load_tasks_into_ui()
 
         for task in due_now:
-            QMessageBox.information(self, "Lembrete", f"{task.title}\n\n{self.human_due_text(task)}")
+            QMessageBox.information(self, "Faz agora!", f"⏰ {task.title}\n\n{self.human_due_text(task)}")
 
 def main() -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    app.setApplicationName("WillDo")
+    app.setApplicationName("Faz agora!")
     app.setOrganizationName("Willian")
+    if APP_ICON.exists():
+        app.setWindowIcon(QIcon(str(APP_ICON)))
     window = TodoApp()
     window.show()
     exit_code = app.exec()

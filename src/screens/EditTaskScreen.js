@@ -6,6 +6,9 @@ import {
   Platform,
   Alert,
   TouchableOpacity,
+  Modal,
+  SafeAreaView,
+  KeyboardAvoidingView,
 } from 'react-native';
 import {
   TextInput,
@@ -14,13 +17,10 @@ import {
   useTheme,
   Divider,
   IconButton,
-  List,
   Checkbox,
   Menu,
   Switch,
   Card,
-  Dialog,
-  Portal,
 } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Markdown from 'react-native-markdown-display';
@@ -48,13 +48,7 @@ import {
 
 export default function EditTaskScreen({ route, navigation }) {
   const theme = useTheme();
-  const screenScrollRef = useRef(null);
   const richEditorRef = useRef(null);
-  const detailsSectionYRef = useRef(0);
-  const screenScrollYRef = useRef(0);
-  const editorScrollYRef = useRef(0);
-  const editorContentHeightRef = useRef(0);
-  const editorTouchRef = useRef({ pageY: 0, screenY: 0 });
   const existingTask = route.params?.task;
   const existingCustomRecurrence = parseCustomRecurrence(existingTask?.recurrence);
   const [taskId] = useState(existingTask?.id || Crypto.randomUUID());
@@ -68,7 +62,6 @@ export default function EditTaskScreen({ route, navigation }) {
   const initialDetails = existingTask?.details_md || '';
   const [details, setDetails] = useState(initialDetails);
   const [savedDetails, setSavedDetails] = useState(initialDetails);
-  const [detailsConsumed, setDetailsConsumed] = useState(false);
   const [hasDueDate, setHasDueDate] = useState(Boolean(existingTask?.due_at));
   const [dueAt, setDueAt] = useState(
     existingTask?.due_at ? new Date(existingTask.due_at) : new Date()
@@ -83,10 +76,12 @@ export default function EditTaskScreen({ route, navigation }) {
   const [subtasks, setSubtasks] = useState(existingTask?.subtasks || []);
   const [selectedSubtaskId, setSelectedSubtaskId] = useState(null);
   const [editingSubtaskId, setEditingSubtaskId] = useState(null);
-  const [editorDraft, setEditorDraft] = useState({ text: initialDetails, consumed: false });
   const [editorStatus, setEditorStatus] = useState(
     'Use os botões acima para salvar o conteúdo.'
   );
+  const [detailsEditorOpen, setDetailsEditorOpen] = useState(false);
+  const [editorOpenSnapshot, setEditorOpenSnapshot] = useState(initialDetails);
+  const [editorSessionKey, setEditorSessionKey] = useState(0);
 
   // UI States
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -128,14 +123,6 @@ export default function EditTaskScreen({ route, navigation }) {
 
   const handleEditorChange = (html) => {
     setDetails(editorHtmlToMarkdown(html));
-    setDetailsConsumed(false);
-  };
-
-  const replaceEditorContent = (markdown) => {
-    setDetails(markdown);
-    requestAnimationFrame(() => {
-      richEditorRef.current?.setContentHTML(markdownToEditorHtml(markdown));
-    });
   };
 
   const insertEditorLink = () => {
@@ -224,42 +211,40 @@ export default function EditTaskScreen({ route, navigation }) {
     ];
     if (!await persistTask(savedDetails, nextSubtasks)) return;
     setSubtasks(nextSubtasks);
-    replaceEditorContent('');
-    setDetailsConsumed(true);
+    setDetails(savedDetails);
+    setDetailsEditorOpen(false);
     setEditorStatus('✓ Subtarefa adicionada e tarefa salva.');
   };
 
   const finishSubtaskEdit = (status) => {
     setEditingSubtaskId(null);
-    replaceEditorContent(editorDraft.text);
-    setDetailsConsumed(editorDraft.consumed);
+    setDetails(savedDetails);
+    setDetailsEditorOpen(false);
+    setLinkDialogVisible(false);
     setEditorStatus(status);
   };
 
-  const editSubtask = (subtask, switched = false) => {
-    if (editingSubtaskId === subtask.id) {
-      finishSubtaskEdit('Edição cancelada.');
-      setSelectedSubtaskId(null);
+  const openDetailsEditor = () => {
+    if (!title.trim()) {
+      Alert.alert('Aviso', 'Digite o nome da tarefa antes de abrir os detalhes.');
       return;
     }
-    if (!editingSubtaskId) {
-      setEditorDraft({ text: details, consumed: detailsConsumed });
-    }
+    setEditingSubtaskId(null);
+    setDetails(savedDetails);
+    setEditorOpenSnapshot(savedDetails);
+    setEditorSessionKey(current => current + 1);
+    setEditorStatus('Edite e escolha como salvar o conteúdo.');
+    setDetailsEditorOpen(true);
+  };
+
+  const editSubtask = (subtask) => {
     setSelectedSubtaskId(subtask.id);
     setEditingSubtaskId(subtask.id);
-    replaceEditorContent(subtask.title);
-    setDetailsConsumed(false);
-    setEditorStatus(
-      switched
-        ? 'Edição anterior descartada. Agora editando a subtarefa selecionada.'
-        : 'Editando a subtarefa selecionada no mesmo editor.'
-    );
-    requestAnimationFrame(() => {
-      screenScrollRef.current?.scrollTo({
-        y: Math.max(0, detailsSectionYRef.current - 12),
-        animated: true,
-      });
-    });
+    setDetails(subtask.title);
+    setEditorOpenSnapshot(subtask.title);
+    setEditorSessionKey(current => current + 1);
+    setEditorStatus('Editando a subtarefa selecionada.');
+    setDetailsEditorOpen(true);
   };
 
   const selectSubtask = (subtask) => {
@@ -271,9 +256,51 @@ export default function EditTaskScreen({ route, navigation }) {
       return;
     }
     setSelectedSubtaskId(subtask.id);
-    if (editingSubtaskId) {
-      editSubtask(subtask, true);
+  };
+
+  const discardEditorChanges = () => {
+    setDetailsEditorOpen(false);
+    setLinkDialogVisible(false);
+    setEditingSubtaskId(null);
+    setDetails(savedDetails);
+  };
+
+  const requestCloseDetailsEditor = () => {
+    if (linkDialogVisible) {
+      setLinkDialogVisible(false);
+      return;
     }
+
+    if (details.trim() === editorOpenSnapshot.trim()) {
+      discardEditorChanges();
+      return;
+    }
+
+    Alert.alert(
+      'Descartar detalhes da tarefa?',
+      'As alterações feitas no editor ainda não foram salvas.',
+      [
+        { text: 'Não', style: 'cancel' },
+        { text: 'Sim', style: 'destructive', onPress: discardEditorChanges },
+      ]
+    );
+  };
+
+  const runEditorAction = (action, selected) => {
+    if (action === actions.insertLink) {
+      setLinkDialogVisible(true);
+      return;
+    }
+
+    const editor = richEditorRef.current;
+    if (!editor) return;
+    const shouldReturnToParagraph = selected
+      && (action === actions.heading1 || action === actions.heading2);
+    editor.showAndroidKeyboard();
+    editor.sendAction(
+      shouldReturnToParagraph ? actions.setParagraph : action,
+      'result'
+    );
   };
 
   const saveEditorContent = async () => {
@@ -293,41 +320,14 @@ export default function EditTaskScreen({ route, navigation }) {
     }
     if (!await persistTask(details, subtasks)) return;
     setSavedDetails(details);
-    setDetailsConsumed(false);
+    setEditorOpenSnapshot(details);
+    setDetailsEditorOpen(false);
     setEditorStatus('✓ Descrição geral e tarefa salvas.');
   };
 
   const saveTaskWithoutEditor = async () => {
     if (!await persistTask(savedDetails, subtasks)) return;
     navigation.goBack();
-  };
-
-  const beginEditorGesture = (event) => {
-    editorTouchRef.current = {
-      pageY: event.nativeEvent.pageY,
-      screenY: screenScrollYRef.current,
-    };
-  };
-
-  const shouldMoveEditorGestureToScreen = (event) => {
-    const deltaY = event.nativeEvent.pageY - editorTouchRef.current.pageY;
-    if (Math.abs(deltaY) < 6) return false;
-
-    const contentHeight = editorContentHeightRef.current;
-    const editorHeight = 218;
-    const atTop = editorScrollYRef.current <= 1;
-    const atBottom = editorScrollYRef.current + editorHeight >= contentHeight - 1;
-    const hasNoInnerScroll = contentHeight <= editorHeight + 1;
-
-    return hasNoInnerScroll || (atTop && deltaY > 0) || (atBottom && deltaY < 0);
-  };
-
-  const moveScreenFromEditor = (event) => {
-    const deltaY = event.nativeEvent.pageY - editorTouchRef.current.pageY;
-    screenScrollRef.current?.scrollTo({
-      y: Math.max(0, editorTouchRef.current.screenY - deltaY),
-      animated: false,
-    });
   };
 
   const toggleSubtask = async (id) => {
@@ -353,15 +353,10 @@ export default function EditTaskScreen({ route, navigation }) {
   return (
     <>
     <ScrollView
-      ref={screenScrollRef}
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
       nestedScrollEnabled
-      onScroll={({ nativeEvent }) => {
-        screenScrollYRef.current = nativeEvent.contentOffset.y;
-      }}
-      scrollEventThrottle={16}
     >
       {/* Título da Tarefa */}
       <TextInput
@@ -522,97 +517,24 @@ export default function EditTaskScreen({ route, navigation }) {
         </Card.Content>
       </Card>
 
-      {/* Editor visual de descrição e subtarefas */}
-      <Card
-        style={styles.cardSection}
-        onLayout={({ nativeEvent }) => {
-          detailsSectionYRef.current = nativeEvent.layout.y;
-        }}
-      >
-        <Card.Content>
-          <Text variant="titleMedium" style={[styles.sectionTitle, styles.editorTitle]}>
-            Detalhes da Tarefa
-          </Text>
-
-          <RichToolbar
-            editor={richEditorRef}
-            actions={EDITOR_ACTIONS}
-            iconMap={EDITOR_ICON_MAP}
-            iconSize={32}
-            iconGap={10}
-            iconTint="#b5b5b5"
-            selectedIconTint={theme.colors.primary}
-            selectedButtonStyle={styles.toolbarButtonSelected}
-            onInsertLink={() => setLinkDialogVisible(true)}
-            style={styles.toolbarRow}
-          />
-
-          <View
-            style={styles.richEditorFrame}
-            onTouchStart={beginEditorGesture}
-            onMoveShouldSetResponderCapture={shouldMoveEditorGestureToScreen}
-            onResponderMove={moveScreenFromEditor}
-          >
-            <RichEditor
-              ref={richEditorRef}
-              initialContentHTML={markdownToEditorHtml(initialDetails)}
-              initialHeight={220}
-              useContainer={false}
-              scrollEnabled
-              placeholder="Escreva a descrição geral ou uma subtarefa..."
-              onChange={handleEditorChange}
-              onHeightChange={(height) => {
-                editorContentHeightRef.current = height;
-              }}
-              onScroll={({ nativeEvent }) => {
-                editorScrollYRef.current = nativeEvent.contentOffset.y;
-              }}
-              scrollEventThrottle={16}
-              pasteAsPlainText
-              defaultHttps
-              style={styles.richEditor}
-              editorStyle={RICH_EDITOR_STYLE}
-            />
-          </View>
-
-          <View style={styles.editorActions}>
-            <Button
-              mode="outlined"
-              icon="content-save-outline"
-              onPress={saveEditorContent}
-              loading={isSaving}
-              disabled={isSaving}
-            >
-              {editingSubtaskId ? 'Salvar alterações da subtarefa' : 'Salvar como descrição'}
-            </Button>
-            {editingSubtaskId ? (
-              <Button
-                mode="text"
-                icon="close"
-                onPress={() => {
-                  finishSubtaskEdit('Edição cancelada.');
-                  setSelectedSubtaskId(null);
-                }}
-              >
-                Cancelar edição
-              </Button>
-            ) : (
-              <Button
-                mode="contained"
-                icon="format-list-checks"
-                onPress={addSubtaskFromEditor}
-                loading={isSaving}
-                disabled={isSaving || !details.trim()}
-              >
-                Adicionar como subtarefa
-              </Button>
-            )}
-            <Text variant="bodySmall" style={styles.editorStatus}>
-              {editorStatus}
+      {/* O editor abre em tela inteira para não disputar a rolagem da tarefa. */}
+      <TouchableOpacity activeOpacity={0.78} onPress={openDetailsEditor}>
+        <Card style={styles.cardSection}>
+          <Card.Content style={styles.detailsLauncherContent}>
+            <View style={styles.detailsLauncherHeader}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Detalhes da Tarefa
+              </Text>
+              <IconButton icon="arrow-expand" size={21} style={styles.detailsLauncherIcon} />
+            </View>
+            <Text variant="bodyMedium" style={styles.detailsLauncherText}>
+              {savedDetails.trim()
+                ? 'Toque para visualizar ou editar a descrição em tela inteira.'
+                : 'Toque para escrever uma descrição ou criar uma subtarefa.'}
             </Text>
-          </View>
-        </Card.Content>
-      </Card>
+          </Card.Content>
+        </Card>
+      </TouchableOpacity>
 
       {/* Seção de Subtarefas */}
       <Card style={styles.cardSection}>
@@ -641,7 +563,7 @@ export default function EditTaskScreen({ route, navigation }) {
                   icon="pencil-outline"
                   size={20}
                   disabled={isSaving}
-                  onPress={() => editSubtask(s, Boolean(editingSubtaskId))}
+                  onPress={() => editSubtask(s)}
                 />
                 <IconButton
                   icon="delete-outline"
@@ -686,26 +608,143 @@ export default function EditTaskScreen({ route, navigation }) {
       )}
     </ScrollView>
 
-    <Portal>
-      <Dialog visible={linkDialogVisible} onDismiss={() => setLinkDialogVisible(false)}>
-        <Dialog.Title>Adicionar link</Dialog.Title>
-        <Dialog.Content>
-          <TextInput
-            label="Endereço"
-            value={linkUrl}
-            onChangeText={setLinkUrl}
-            mode="outlined"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
+    <Modal
+      visible={detailsEditorOpen}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      statusBarTranslucent={false}
+      onRequestClose={requestCloseDetailsEditor}
+    >
+      <SafeAreaView style={styles.fullScreenEditorSafeArea}>
+        <KeyboardAvoidingView
+          style={styles.fullScreenEditor}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.fullScreenHeader}>
+            <IconButton
+              icon="arrow-left"
+              size={24}
+              accessibilityLabel="Voltar"
+              onPress={requestCloseDetailsEditor}
+            />
+            <Text variant="titleLarge" style={styles.fullScreenTitle}>
+              {editingSubtaskId ? 'Editar subtarefa' : 'Detalhes da Tarefa'}
+            </Text>
+          </View>
+
+          <View style={styles.fullScreenEditorFrame}>
+            <RichEditor
+              key={editorSessionKey}
+              ref={richEditorRef}
+              initialContentHTML={markdownToEditorHtml(details)}
+              initialFocus
+              useContainer={false}
+              scrollEnabled
+              nestedScrollEnabled
+              placeholder="Escreva a descrição geral ou uma subtarefa..."
+              onChange={handleEditorChange}
+              pasteAsPlainText
+              defaultHttps
+              style={styles.fullScreenRichEditor}
+              editorStyle={RICH_EDITOR_STYLE}
+            />
+          </View>
+
+          <RichToolbar
+            editor={richEditorRef}
+            actions={EDITOR_ACTIONS}
+            iconTint="#b5b5b5"
+            selectedIconTint="#090909"
+            renderAction={(action, selected) => (
+              <TouchableOpacity
+                key={action}
+                activeOpacity={0.72}
+                accessibilityRole="button"
+                accessibilityLabel={EDITOR_ACCESSIBILITY_LABELS[action]}
+                onPress={() => runEditorAction(action, selected)}
+                style={[
+                  styles.formatButton,
+                  selected && styles.formatButtonSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.formatButtonText,
+                    action === actions.setBold && styles.boldFormatButtonText,
+                    selected && styles.formatButtonTextSelected,
+                  ]}
+                >
+                  {EDITOR_LABELS[action]}
+                </Text>
+              </TouchableOpacity>
+            )}
+            style={styles.fullScreenToolbar}
+            flatContainerStyle={styles.fullScreenToolbarContent}
           />
-        </Dialog.Content>
-        <Dialog.Actions>
-          <Button onPress={() => setLinkDialogVisible(false)}>Cancelar</Button>
-          <Button onPress={insertEditorLink} disabled={!linkUrl.trim()}>Adicionar</Button>
-        </Dialog.Actions>
-      </Dialog>
-    </Portal>
+
+          {linkDialogVisible && (
+            <View style={styles.linkPanel}>
+              <TextInput
+                label="Endereço do link"
+                value={linkUrl}
+                onChangeText={setLinkUrl}
+                mode="outlined"
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                style={styles.linkInput}
+              />
+              <View style={styles.linkActions}>
+                <Button mode="text" onPress={() => setLinkDialogVisible(false)}>
+                  Cancelar
+                </Button>
+                <Button mode="contained" onPress={insertEditorLink} disabled={!linkUrl.trim()}>
+                  Adicionar
+                </Button>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.fullScreenActions}>
+            <Button
+              mode="outlined"
+              icon="content-save-outline"
+              onPress={saveEditorContent}
+              loading={isSaving}
+              disabled={isSaving}
+            >
+              {editingSubtaskId ? 'Salvar alterações da subtarefa' : 'Salvar como descrição'}
+            </Button>
+            {editingSubtaskId ? (
+              <Button
+                mode="text"
+                icon="close"
+                onPress={() => {
+                  finishSubtaskEdit('Edição cancelada.');
+                  setSelectedSubtaskId(null);
+                }}
+              >
+                Cancelar edição
+              </Button>
+            ) : (
+              <Button
+                mode="contained"
+                icon="format-list-checks"
+                onPress={addSubtaskFromEditor}
+                loading={isSaving}
+                disabled={isSaving || !details.trim()}
+              >
+                Adicionar como subtarefa
+              </Button>
+            )}
+            <Text variant="bodySmall" style={styles.editorStatus}>
+              {editorStatus}
+            </Text>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Modal>
     </>
   );
 }
@@ -789,39 +828,117 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#f5f5f5',
   },
-  editorTitle: {
-    marginBottom: 10,
+  detailsLauncherContent: {
+    paddingVertical: 12,
   },
-  toolbarRow: {
+  detailsLauncherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detailsLauncherIcon: {
+    width: 34,
+    height: 34,
+    margin: 0,
     backgroundColor: '#222222',
-    borderRadius: 8,
-    marginBottom: 8,
-    elevation: 0,
   },
-  toolbarLabel: {
-    fontSize: 14,
+  detailsLauncherText: {
+    color: '#a3a3a3',
+    marginTop: 5,
+    lineHeight: 20,
+  },
+  fullScreenEditorSafeArea: {
+    flex: 1,
+    backgroundColor: '#090909',
+  },
+  fullScreenEditor: {
+    flex: 1,
+    backgroundColor: '#090909',
+  },
+  fullScreenHeader: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#292929',
+    paddingRight: 12,
+  },
+  fullScreenTitle: {
+    color: '#f5f5f5',
     fontWeight: '700',
-    textAlign: 'center',
+    flex: 1,
   },
-  toolbarButtonSelected: {
-    backgroundColor: '#404040',
-    borderRadius: 6,
-  },
-  richEditorFrame: {
+  fullScreenEditorFrame: {
+    flex: 1,
+    minHeight: 160,
+    marginHorizontal: 12,
+    marginTop: 10,
     backgroundColor: '#101010',
-    height: 220,
     borderWidth: 1,
     borderColor: '#404040',
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
   },
-  richEditor: {
-    height: 218,
+  fullScreenRichEditor: {
+    flex: 1,
     backgroundColor: '#101010',
   },
-  editorActions: {
+  fullScreenToolbar: {
+    height: 48,
+    marginHorizontal: 12,
+    marginTop: 8,
+    backgroundColor: '#222222',
+    borderRadius: 10,
+  },
+  fullScreenToolbarContent: {
+    paddingHorizontal: 4,
+  },
+  formatButton: {
+    minWidth: 48,
+    height: 40,
+    marginHorizontal: 2,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  formatButtonSelected: {
+    backgroundColor: '#f5f5f5',
+  },
+  formatButtonText: {
+    color: '#d4d4d4',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  boldFormatButtonText: {
+    fontWeight: '900',
+  },
+  formatButtonTextSelected: {
+    color: '#090909',
+  },
+  linkPanel: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#303030',
+    backgroundColor: '#151515',
+  },
+  linkInput: {
+    backgroundColor: '#151515',
+  },
+  linkActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 6,
+  },
+  fullScreenActions: {
     gap: 6,
-    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   editorStatus: {
     color: '#a3a3a3',
@@ -919,25 +1036,22 @@ const EDITOR_ACTIONS = [
   actions.insertLink,
 ];
 
-const EDITOR_ICON_MAP = {
-  [actions.setBold]: ({ tintColor }) => (
-    <Text style={[styles.toolbarLabel, { color: tintColor, fontWeight: '800' }]}>N</Text>
-  ),
-  [actions.setItalic]: ({ tintColor }) => (
-    <Text style={[styles.toolbarLabel, { color: tintColor, fontStyle: 'italic', fontWeight: '600' }]}>I</Text>
-  ),
-  [actions.insertBulletsList]: ({ tintColor }) => (
-    <Text style={[styles.toolbarLabel, { color: tintColor }]}>Lista</Text>
-  ),
-  [actions.heading1]: ({ tintColor }) => (
-    <Text style={[styles.toolbarLabel, { color: tintColor }]}>H1</Text>
-  ),
-  [actions.heading2]: ({ tintColor }) => (
-    <Text style={[styles.toolbarLabel, { color: tintColor }]}>H2</Text>
-  ),
-  [actions.insertLink]: ({ tintColor }) => (
-    <Text style={[styles.toolbarLabel, { color: tintColor }]}>Link</Text>
-  ),
+const EDITOR_LABELS = {
+  [actions.setBold]: 'N',
+  [actions.setItalic]: 'I',
+  [actions.insertBulletsList]: 'Lista',
+  [actions.heading1]: 'H1',
+  [actions.heading2]: 'H2',
+  [actions.insertLink]: 'Link',
+};
+
+const EDITOR_ACCESSIBILITY_LABELS = {
+  [actions.setBold]: 'Negrito',
+  [actions.setItalic]: 'Itálico',
+  [actions.insertBulletsList]: 'Lista',
+  [actions.heading1]: 'Título H1',
+  [actions.heading2]: 'Título H2',
+  [actions.insertLink]: 'Adicionar link',
 };
 
 const RICH_EDITOR_STYLE = {
