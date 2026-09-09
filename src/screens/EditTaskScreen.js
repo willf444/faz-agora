@@ -320,6 +320,7 @@ export default function EditTaskScreen({ route, navigation }) {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
     >
       {/* Título da Tarefa */}
       <TextInput
@@ -497,11 +498,14 @@ export default function EditTaskScreen({ route, navigation }) {
             <RichEditor
               ref={richEditorRef}
               initialContentHTML={markdownToEditorHtml(initialDetails)}
-              initialHeight={160}
+              initialHeight={220}
+              useContainer={false}
+              scrollEnabled
               placeholder="Escreva a descrição geral ou uma subtarefa..."
               onChange={handleEditorChange}
               pasteAsPlainText
               defaultHttps
+              style={styles.richEditor}
               editorStyle={RICH_EDITOR_STYLE}
             />
           </View>
@@ -732,11 +736,15 @@ const styles = StyleSheet.create({
   },
   richEditorFrame: {
     backgroundColor: '#ffffff',
-    minHeight: 160,
+    height: 220,
     borderWidth: 1,
     borderColor: '#cbd5e1',
     borderRadius: 8,
     overflow: 'hidden',
+  },
+  richEditor: {
+    height: 218,
+    backgroundColor: '#ffffff',
   },
   editorActions: {
     gap: 6,
@@ -843,7 +851,7 @@ const EDITOR_ICON_MAP = {
     <Text style={[styles.toolbarLabel, { color: tintColor, fontWeight: '800' }]}>N</Text>
   ),
   [actions.setItalic]: ({ tintColor }) => (
-    <Text style={[styles.toolbarLabel, { color: tintColor, fontStyle: 'italic' }]}>I</Text>
+    <Text style={[styles.toolbarLabel, { color: tintColor, fontWeight: '800' }]}>I</Text>
   ),
   [actions.insertBulletsList]: ({ tintColor }) => (
     <Text style={[styles.toolbarLabel, { color: tintColor }]}>Lista</Text>
