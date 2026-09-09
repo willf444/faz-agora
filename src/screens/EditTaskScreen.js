@@ -51,6 +51,10 @@ export default function EditTaskScreen({ route, navigation }) {
   const screenScrollRef = useRef(null);
   const richEditorRef = useRef(null);
   const detailsSectionYRef = useRef(0);
+  const screenScrollYRef = useRef(0);
+  const editorScrollYRef = useRef(0);
+  const editorContentHeightRef = useRef(0);
+  const editorTouchRef = useRef({ pageY: 0, screenY: 0 });
   const existingTask = route.params?.task;
   const existingCustomRecurrence = parseCustomRecurrence(existingTask?.recurrence);
   const [taskId] = useState(existingTask?.id || Crypto.randomUUID());
@@ -293,6 +297,39 @@ export default function EditTaskScreen({ route, navigation }) {
     setEditorStatus('✓ Descrição geral e tarefa salvas.');
   };
 
+  const saveTaskWithoutEditor = async () => {
+    if (!await persistTask(savedDetails, subtasks)) return;
+    navigation.goBack();
+  };
+
+  const beginEditorGesture = (event) => {
+    editorTouchRef.current = {
+      pageY: event.nativeEvent.pageY,
+      screenY: screenScrollYRef.current,
+    };
+  };
+
+  const shouldMoveEditorGestureToScreen = (event) => {
+    const deltaY = event.nativeEvent.pageY - editorTouchRef.current.pageY;
+    if (Math.abs(deltaY) < 6) return false;
+
+    const contentHeight = editorContentHeightRef.current;
+    const editorHeight = 218;
+    const atTop = editorScrollYRef.current <= 1;
+    const atBottom = editorScrollYRef.current + editorHeight >= contentHeight - 1;
+    const hasNoInnerScroll = contentHeight <= editorHeight + 1;
+
+    return hasNoInnerScroll || (atTop && deltaY > 0) || (atBottom && deltaY < 0);
+  };
+
+  const moveScreenFromEditor = (event) => {
+    const deltaY = event.nativeEvent.pageY - editorTouchRef.current.pageY;
+    screenScrollRef.current?.scrollTo({
+      y: Math.max(0, editorTouchRef.current.screenY - deltaY),
+      animated: false,
+    });
+  };
+
   const toggleSubtask = async (id) => {
     const nextSubtasks = subtasks.map(s => (
       s.id === id ? { ...s, completed: !s.completed } : s
@@ -321,6 +358,10 @@ export default function EditTaskScreen({ route, navigation }) {
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
       nestedScrollEnabled
+      onScroll={({ nativeEvent }) => {
+        screenScrollYRef.current = nativeEvent.contentOffset.y;
+      }}
+      scrollEventThrottle={16}
     >
       {/* Título da Tarefa */}
       <TextInput
@@ -331,6 +372,17 @@ export default function EditTaskScreen({ route, navigation }) {
         mode="outlined"
         style={styles.input}
       />
+
+      <Button
+        mode="contained"
+        icon="content-save-outline"
+        onPress={saveTaskWithoutEditor}
+        loading={isSaving}
+        disabled={isSaving || Boolean(editingSubtaskId)}
+        style={styles.saveTaskButton}
+      >
+        Salvar tarefa
+      </Button>
 
       {/* Seção Data e Hora de Vencimento */}
       <Card style={styles.cardSection}>
@@ -494,7 +546,12 @@ export default function EditTaskScreen({ route, navigation }) {
             style={styles.toolbarRow}
           />
 
-          <View style={styles.richEditorFrame}>
+          <View
+            style={styles.richEditorFrame}
+            onTouchStart={beginEditorGesture}
+            onMoveShouldSetResponderCapture={shouldMoveEditorGestureToScreen}
+            onResponderMove={moveScreenFromEditor}
+          >
             <RichEditor
               ref={richEditorRef}
               initialContentHTML={markdownToEditorHtml(initialDetails)}
@@ -503,6 +560,13 @@ export default function EditTaskScreen({ route, navigation }) {
               scrollEnabled
               placeholder="Escreva a descrição geral ou uma subtarefa..."
               onChange={handleEditorChange}
+              onHeightChange={(height) => {
+                editorContentHeightRef.current = height;
+              }}
+              onScroll={({ nativeEvent }) => {
+                editorScrollYRef.current = nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={16}
               pasteAsPlainText
               defaultHttps
               style={styles.richEditor}
@@ -656,6 +720,9 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: 14,
     backgroundColor: '#ffffff',
+  },
+  saveTaskButton: {
+    marginBottom: 14,
   },
   cardSection: {
     backgroundColor: '#ffffff',
