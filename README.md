@@ -1,6 +1,6 @@
-# Faz (Android)
+# Faz agora! (Android)
 
-Versão mobile do gerenciador de tarefas **Faz** baseada no script desktop `willdo.py`. Desenvolvido em **React Native** com **Expo (SDK 51)** e interface em **Material Design 3**.
+Versão mobile do gerenciador de tarefas **Faz agora!** baseada no script desktop `willdo.py`. Desenvolvido em **React Native** com **Expo (SDK 51)** e interface em **Material Design 3**.
 
 ---
 
@@ -76,7 +76,7 @@ npx eas-cli build -p android --profile preview
 
 ---
 
-## ☁️ Conectar o APK ao Faz do Debian
+## ☁️ Conectar o APK ao Faz agora! do Debian
 
 1. No Debian, escolha como diretório de tarefas uma pasta WebDAV montada. O desktop usará o arquivo `task.json` dessa pasta e perceberá alterações externas automaticamente.
 2. No APK, toque na engrenagem do cabeçalho.

@@ -14,3 +14,5 @@ web-build/
 android/
 ios/
 *.apk
+backups/
+willdo-backup-*.py

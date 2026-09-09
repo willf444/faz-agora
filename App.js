@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme as NavigationDarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,6 +13,18 @@ import { notificationService } from './src/services/notificationService';
 
 const Stack = createNativeStackNavigator();
 
+const navigationTheme = {
+  ...NavigationDarkTheme,
+  colors: {
+    ...NavigationDarkTheme.colors,
+    primary: '#f5f5f5',
+    background: '#090909',
+    card: '#000000',
+    text: '#f5f5f5',
+    border: '#303030',
+  },
+};
+
 export default function App() {
   useEffect(() => {
     notificationService.requestPermissions();
@@ -21,15 +33,15 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <PaperProvider theme={theme}>
-        <StatusBar style="light" backgroundColor={theme.colors.primary} />
-        <NavigationContainer>
+        <StatusBar style="light" backgroundColor="#000000" />
+        <NavigationContainer theme={navigationTheme}>
           <Stack.Navigator
             initialRouteName="Home"
             screenOptions={{
               headerStyle: {
-                backgroundColor: theme.colors.primary,
+                backgroundColor: '#000000',
               },
-              headerTintColor: '#ffffff',
+              headerTintColor: '#f5f5f5',
               headerTitleStyle: {
                 fontWeight: 'bold',
               },
@@ -41,7 +53,7 @@ export default function App() {
             <Stack.Screen
               name="Home"
               component={HomeScreen}
-              options={{ title: 'Faz' }}
+              options={{ title: 'Faz agora!' }}
             />
             <Stack.Screen
               name="EditTask"
