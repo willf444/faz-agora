@@ -12,7 +12,7 @@ Versão mobile do gerenciador de tarefas **WillDo** baseada no script desktop `w
   - Data e hora com seletor nativo Android.
   - Recorrência inteligente (**Diariamente**, **Semanalmente**, **Mensalmente no mesmo dia**, **Anualmente no mesmo dia**).
   - Recorrência personalizada a cada quantidade de horas, dias ou semanas.
-  - Editor e pré-visualizador de **Markdown** com barra de ferramentas (`**negrito**`, `*itálico*`, `- lista`, `# título`, `[link]`).
+  - Editor visual com negrito, itálico, listas, títulos e links, mantendo compatibilidade com o arquivo compartilhado do desktop.
   - Gerenciamento de subtarefas (checklist interativo).
 - **Lógica de Recorrência Fiel ao Desktop**:
   - Conclusão adiantada solicita confirmação antes de avançar.

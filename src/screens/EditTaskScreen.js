@@ -18,11 +18,17 @@ import {
   Checkbox,
   Menu,
   Switch,
-  SegmentedButtons,
   Card,
+  Dialog,
+  Portal,
 } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Markdown from 'react-native-markdown-display';
+import {
+  actions,
+  RichEditor,
+  RichToolbar,
+} from 'react-native-pell-rich-editor';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import * as Crypto from 'expo-crypto';
@@ -35,10 +41,15 @@ import {
   formatCustomRecurrence,
   parseCustomRecurrence,
 } from '../utils/recurrence';
+import {
+  editorHtmlToMarkdown,
+  markdownToEditorHtml,
+} from '../utils/richText';
 
 export default function EditTaskScreen({ route, navigation }) {
   const theme = useTheme();
   const screenScrollRef = useRef(null);
+  const richEditorRef = useRef(null);
   const detailsSectionYRef = useRef(0);
   const existingTask = route.params?.task;
   const existingCustomRecurrence = parseCustomRecurrence(existingTask?.recurrence);
@@ -78,8 +89,8 @@ export default function EditTaskScreen({ route, navigation }) {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [customUnitMenuVisible, setCustomUnitMenuVisible] = useState(false);
-  const [detailsTab, setDetailsTab] = useState('edit'); // 'edit' ou 'preview'
-  const [detailsInputHeight, setDetailsInputHeight] = useState(140);
+  const [linkDialogVisible, setLinkDialogVisible] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('https://');
 
   const parsedCustomRecurrence = parseCustomRecurrence(recurrence);
   const isCustomRecurrence = recurrence === 'Personalizado' || Boolean(parsedCustomRecurrence);
@@ -111,16 +122,27 @@ export default function EditTaskScreen({ route, navigation }) {
     }
   };
 
-  // Funções de formatação rápida de Markdown
-  const insertMarkdownSnippet = (prefix, suffix = '') => {
-    setDetails(prev => `${prev}\n${prefix}Texto${suffix}\n`.trim());
+  const handleEditorChange = (html) => {
+    setDetails(editorHtmlToMarkdown(html));
     setDetailsConsumed(false);
-    setDetailsTab('edit');
   };
 
-  const handleDetailsChange = (value) => {
-    setDetails(value);
-    setDetailsConsumed(false);
+  const replaceEditorContent = (markdown) => {
+    setDetails(markdown);
+    requestAnimationFrame(() => {
+      richEditorRef.current?.setContentHTML(markdownToEditorHtml(markdown));
+    });
+  };
+
+  const insertEditorLink = () => {
+    const trimmedUrl = linkUrl.trim();
+    if (!trimmedUrl) return;
+    const normalizedUrl = /^https?:\/\//i.test(trimmedUrl)
+      ? trimmedUrl
+      : `https://${trimmedUrl}`;
+    setLinkDialogVisible(false);
+    setLinkUrl('https://');
+    richEditorRef.current?.insertLink('', normalizedUrl);
   };
 
   const persistTask = async (nextDetails, nextSubtasks) => {
@@ -198,15 +220,14 @@ export default function EditTaskScreen({ route, navigation }) {
     ];
     if (!await persistTask(savedDetails, nextSubtasks)) return;
     setSubtasks(nextSubtasks);
-    setDetails('');
+    replaceEditorContent('');
     setDetailsConsumed(true);
     setEditorStatus('✓ Subtarefa adicionada e tarefa salva.');
-    setDetailsTab('edit');
   };
 
   const finishSubtaskEdit = (status) => {
     setEditingSubtaskId(null);
-    setDetails(editorDraft.text);
+    replaceEditorContent(editorDraft.text);
     setDetailsConsumed(editorDraft.consumed);
     setEditorStatus(status);
   };
@@ -222,9 +243,8 @@ export default function EditTaskScreen({ route, navigation }) {
     }
     setSelectedSubtaskId(subtask.id);
     setEditingSubtaskId(subtask.id);
-    setDetails(subtask.title);
+    replaceEditorContent(subtask.title);
     setDetailsConsumed(false);
-    setDetailsTab('edit');
     setEditorStatus(
       switched
         ? 'Edição anterior descartada. Agora editando a subtarefa selecionada.'
@@ -294,6 +314,7 @@ export default function EditTaskScreen({ route, navigation }) {
   };
 
   return (
+    <>
     <ScrollView
       ref={screenScrollRef}
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -447,7 +468,7 @@ export default function EditTaskScreen({ route, navigation }) {
         </Card.Content>
       </Card>
 
-      {/* Seção de Detalhes com Markdown */}
+      {/* Editor visual de descrição e subtarefas */}
       <Card
         style={styles.cardSection}
         onLayout={({ nativeEvent }) => {
@@ -455,60 +476,35 @@ export default function EditTaskScreen({ route, navigation }) {
         }}
       >
         <Card.Content>
-          <View style={styles.markdownHeaderRow}>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Detalhes da Tarefa
-            </Text>
-            <SegmentedButtons
-              value={detailsTab}
-              onValueChange={setDetailsTab}
-              density="small"
-              buttons={[
-                { value: 'edit', label: 'Editor' },
-                { value: 'preview', label: 'Prévia' },
-              ]}
-              style={styles.detailsTabs}
+          <Text variant="titleMedium" style={[styles.sectionTitle, styles.editorTitle]}>
+            Detalhes da Tarefa
+          </Text>
+
+          <RichToolbar
+            editor={richEditorRef}
+            actions={EDITOR_ACTIONS}
+            iconMap={EDITOR_ICON_MAP}
+            iconSize={32}
+            iconGap={10}
+            iconTint="#475569"
+            selectedIconTint={theme.colors.primary}
+            selectedButtonStyle={styles.toolbarButtonSelected}
+            onInsertLink={() => setLinkDialogVisible(true)}
+            style={styles.toolbarRow}
+          />
+
+          <View style={styles.richEditorFrame}>
+            <RichEditor
+              ref={richEditorRef}
+              initialContentHTML={markdownToEditorHtml(initialDetails)}
+              initialHeight={160}
+              placeholder="Escreva a descrição geral ou uma subtarefa..."
+              onChange={handleEditorChange}
+              pasteAsPlainText
+              defaultHttps
+              editorStyle={RICH_EDITOR_STYLE}
             />
           </View>
-
-          {/* Barra de atalhos rápidos de Markdown */}
-          {detailsTab === 'edit' && (
-            <View style={styles.toolbarRow}>
-              <IconButton icon="format-bold" size={20} onPress={() => insertMarkdownSnippet('**', '**')} />
-              <IconButton icon="format-italic" size={20} onPress={() => insertMarkdownSnippet('*', '*')} />
-              <IconButton icon="format-list-bulleted" size={20} onPress={() => insertMarkdownSnippet('- ')} />
-              <IconButton icon="format-header-1" size={20} onPress={() => insertMarkdownSnippet('# ')} />
-              <IconButton icon="link-variant" size={20} onPress={() => insertMarkdownSnippet('[link](', ')')} />
-            </View>
-          )}
-
-          {detailsTab === 'edit' ? (
-            <TextInput
-              placeholder="Escreva a descrição geral ou uma subtarefa em Markdown..."
-              value={details}
-              onChangeText={handleDetailsChange}
-              mode="outlined"
-              multiline
-              numberOfLines={5}
-              scrollEnabled={false}
-              textAlignVertical="top"
-              rejectResponderTermination={false}
-              onContentSizeChange={({ nativeEvent }) => {
-                setDetailsInputHeight(Math.max(140, nativeEvent.contentSize.height + 24));
-              }}
-              style={[styles.detailsInput, { height: detailsInputHeight }]}
-            />
-          ) : (
-            <View style={styles.previewContainer}>
-              {details.trim() ? (
-                <Markdown style={markdownStyles}>{details}</Markdown>
-              ) : (
-                <Text variant="bodyMedium" style={{ color: '#94a3b8', fontStyle: 'italic' }}>
-                  Sem detalhes para visualizar.
-                </Text>
-              )}
-            </View>
-          )}
 
           <View style={styles.editorActions}>
             <Button
@@ -620,6 +616,28 @@ export default function EditTaskScreen({ route, navigation }) {
         />
       )}
     </ScrollView>
+
+    <Portal>
+      <Dialog visible={linkDialogVisible} onDismiss={() => setLinkDialogVisible(false)}>
+        <Dialog.Title>Adicionar link</Dialog.Title>
+        <Dialog.Content>
+          <TextInput
+            label="Endereço"
+            value={linkUrl}
+            onChangeText={setLinkUrl}
+            mode="outlined"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
+        </Dialog.Content>
+        <Dialog.Actions>
+          <Button onPress={() => setLinkDialogVisible(false)}>Cancelar</Button>
+          <Button onPress={insertEditorLink} disabled={!linkUrl.trim()}>Adicionar</Button>
+        </Dialog.Actions>
+      </Dialog>
+    </Portal>
+    </>
   );
 }
 
@@ -690,34 +708,35 @@ const styles = StyleSheet.create({
     minHeight: 46,
     flexDirection: 'row-reverse',
   },
-  markdownHeaderRow: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  detailsTabs: {
-    alignSelf: 'stretch',
-  },
   sectionTitle: {
     fontWeight: '700',
     color: '#0f172a',
   },
+  editorTitle: {
+    marginBottom: 10,
+  },
   toolbarRow: {
-    flexDirection: 'row',
     backgroundColor: '#f1f5f9',
     borderRadius: 8,
     marginBottom: 8,
+    elevation: 0,
   },
-  detailsInput: {
+  toolbarLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  toolbarButtonSelected: {
+    backgroundColor: '#dbeafe',
+    borderRadius: 6,
+  },
+  richEditorFrame: {
     backgroundColor: '#ffffff',
-    minHeight: 120,
-  },
-  previewContainer: {
-    minHeight: 100,
-    padding: 12,
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
+    minHeight: 160,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   editorActions: {
     gap: 6,
@@ -808,4 +827,42 @@ const completedMarkdownStyles = {
     color: '#94a3b8',
     textDecorationLine: 'line-through',
   },
+};
+
+const EDITOR_ACTIONS = [
+  actions.setBold,
+  actions.setItalic,
+  actions.insertBulletsList,
+  actions.heading1,
+  actions.heading2,
+  actions.insertLink,
+];
+
+const EDITOR_ICON_MAP = {
+  [actions.setBold]: ({ tintColor }) => (
+    <Text style={[styles.toolbarLabel, { color: tintColor, fontWeight: '800' }]}>N</Text>
+  ),
+  [actions.setItalic]: ({ tintColor }) => (
+    <Text style={[styles.toolbarLabel, { color: tintColor, fontStyle: 'italic' }]}>I</Text>
+  ),
+  [actions.insertBulletsList]: ({ tintColor }) => (
+    <Text style={[styles.toolbarLabel, { color: tintColor }]}>Lista</Text>
+  ),
+  [actions.heading1]: ({ tintColor }) => (
+    <Text style={[styles.toolbarLabel, { color: tintColor }]}>H1</Text>
+  ),
+  [actions.heading2]: ({ tintColor }) => (
+    <Text style={[styles.toolbarLabel, { color: tintColor }]}>H2</Text>
+  ),
+  [actions.insertLink]: ({ tintColor }) => (
+    <Text style={[styles.toolbarLabel, { color: tintColor }]}>Link</Text>
+  ),
+};
+
+const RICH_EDITOR_STYLE = {
+  backgroundColor: '#ffffff',
+  color: '#1e293b',
+  caretColor: '#2563eb',
+  placeholderColor: '#94a3b8',
+  contentCSSText: 'font-size: 16px; line-height: 1.45; padding: 10px 12px;',
 };

@@ -7,15 +7,13 @@ import uuid
 import calendar
 import html
 import re
-import threading
-from queue import Empty, Queue
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Optional
 
 from PyQt6.QtCore import Qt, QDateTime, QTimer, QLocale, QSize, QPoint, QEvent, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QTextCharFormat, QTextCursor, QTextDocument, QTextListFormat
+from PyQt6.QtGui import QAction, QGuiApplication, QTextDocument
 from PyQt6.QtWidgets import (
     QApplication,
     QWidget,
@@ -36,11 +34,10 @@ from PyQt6.QtWidgets import (
     QMenu,
     QSizePolicy,
     QTabWidget,
+    QSplitter,
+    QTextBrowser,
     QSpinBox,
     QAbstractItemView,
-    QInputDialog,
-    QTextBrowser,
-    QFrame,
 )
 
 APP_DIR = Path.home() / ".willdo"
@@ -447,53 +444,6 @@ class Task:
             subtasks=[SubTask.from_dict(s) for s in data.get("subtasks", []) if isinstance(s, dict)],
         )
 
-def markdown_fragment(md: str) -> str:
-    rendered = markdown_to_html(md)
-    match = re.search(r"<body>(.*)</body>", rendered, flags=re.DOTALL | re.IGNORECASE)
-    return match.group(1) if match else rendered
-
-def task_details_to_html(task: Task) -> str:
-    sections = []
-    if task.details_md.strip():
-        sections.append(
-            '<div class="section-title">DESCRIÇÃO</div>'
-            f'<div class="description">{markdown_fragment(task.details_md)}</div>'
-        )
-    if task.subtasks:
-        subtask_parts = ['<div class="section-title">SUBTAREFAS</div>']
-        for subtask in task.subtasks:
-            state = "Concluída" if subtask.completed else "Pendente"
-            checkbox = "☑" if subtask.completed else "☐"
-            completed_class = " completed" if subtask.completed else ""
-            subtask_parts.append(
-                f'<div class="subtask{completed_class}">'
-                f'<div class="state"><a class="check" href="willdo-subtask://toggle/{html.escape(subtask.id)}">'
-                f'{checkbox}</a> {state}</div>'
-                f'{markdown_fragment(subtask.title)}'
-                '</div>'
-            )
-        sections.append("".join(subtask_parts))
-    body = "".join(sections)
-    return f"""
-    <html><head><style>
-      body {{ font-family:Arial; color:#1e293b; line-height:1.4; margin:4px; }}
-      .section-title {{ color:#64748b; font-size:11px; font-weight:700; margin:6px 0; }}
-      .description {{ margin-bottom:10px; }}
-      .subtask {{ border:1px solid #e2e8f0; border-radius:7px; padding:7px 9px; margin:6px 0; }}
-      .subtask.completed {{ color:#94a3b8; text-decoration:line-through; }}
-      .state {{ color:#64748b; font-size:11px; font-weight:700; margin-bottom:3px; }}
-      .check {{ color:#2563eb; font-size:17px; text-decoration:none; }}
-      h1 {{ font-size:20px; margin:5px 0; }}
-      h2 {{ font-size:17px; margin:5px 0; }}
-      h3 {{ font-size:15px; margin:4px 0; }}
-      p {{ margin:4px 0; }}
-      ul {{ margin:4px 0 4px 18px; padding:0; }}
-      li {{ margin:2px 0; }}
-      a {{ color:#2563eb; text-decoration:underline; }}
-      code {{ background:#eef2ff; padding:2px 4px; }}
-    </style></head><body>{body}</body></html>
-    """
-
 class ConfigStore:
     def __init__(self, path: Path):
         self.path = path
@@ -624,82 +574,6 @@ class TaskStore:
         removed = before - len(self.tasks)
         self.save()
         return removed
-
-class AsyncTaskSaver:
-    def __init__(self):
-        self._condition = threading.Condition()
-        self._pending = None
-        self._writing = False
-        self.results = Queue()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def schedule(self, path: Path, payload: str, revision: int) -> None:
-        with self._condition:
-            self._pending = (path, payload, revision)
-            self._condition.notify()
-
-    def is_busy(self) -> bool:
-        with self._condition:
-            return self._writing or self._pending is not None
-
-    def _run(self) -> None:
-        while True:
-            with self._condition:
-                while self._pending is None:
-                    self._condition.wait()
-                path, payload, revision = self._pending
-                self._pending = None
-                self._writing = True
-
-            try:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(payload, encoding="utf-8")
-                stat = path.stat()
-                result = (revision, (stat.st_mtime_ns, stat.st_size), "")
-            except Exception as exc:
-                result = (revision, None, str(exc))
-
-            self.results.put(result)
-            with self._condition:
-                self._writing = False
-
-class AsyncTaskLoader:
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._running = False
-        self.results = Queue()
-
-    def check(self, path: Path, known_signature) -> None:
-        with self._lock:
-            if self._running:
-                return
-            self._running = True
-        threading.Thread(
-            target=self._check_file,
-            args=(path, known_signature),
-            daemon=True,
-        ).start()
-
-    def is_busy(self) -> bool:
-        with self._lock:
-            return self._running
-
-    def _check_file(self, path: Path, known_signature) -> None:
-        try:
-            stat = path.stat()
-            signature = (stat.st_mtime_ns, stat.st_size)
-            if signature == known_signature:
-                result = (known_signature, signature, None, "")
-            else:
-                result = (known_signature, signature, path.read_text(encoding="utf-8"), "")
-        except FileNotFoundError:
-            result = (known_signature, None, None, "")
-        except Exception as exc:
-            result = (known_signature, None, None, str(exc))
-        self.results.put(result)
-        with self._lock:
-            self._running = False
 
 class SubTaskRow(QWidget):
     clicked = pyqtSignal()
@@ -841,46 +715,47 @@ class TaskEditorDialog(QDialog):
         layout.addLayout(recurrence_row)
 
         toolbar = QHBoxLayout()
-        self.bold_button = QPushButton("N")
+        self.bold_button = QPushButton("**negrito**")
         self.bold_button.setObjectName("smallButton")
-        self.bold_button.setStyleSheet("font-weight:700;")
-        self.bold_button.clicked.connect(self.toggle_bold)
-        self.italic_button = QPushButton("I")
+        self.bold_button.clicked.connect(self.wrap_bold)
+        self.italic_button = QPushButton("*itálico*")
         self.italic_button.setObjectName("smallButton")
-        self.italic_button.setStyleSheet("font-weight:700;")
-        self.italic_button.clicked.connect(self.toggle_italic)
-        self.list_button = QPushButton("Lista")
+        self.italic_button.clicked.connect(self.wrap_italic)
+        self.list_button = QPushButton("- lista")
         self.list_button.setObjectName("smallButton")
-        self.list_button.clicked.connect(self.toggle_list)
-        self.h1_button = QPushButton("H1")
+        self.list_button.clicked.connect(self.insert_list)
+        self.h1_button = QPushButton("# título")
         self.h1_button.setObjectName("smallButton")
-        self.h1_button.clicked.connect(lambda: self.apply_heading(1))
-        self.h2_button = QPushButton("H2")
-        self.h2_button.setObjectName("smallButton")
-        self.h2_button.clicked.connect(lambda: self.apply_heading(2))
-        self.link_button = QPushButton("Link")
+        self.h1_button.clicked.connect(self.insert_h1)
+        self.link_button = QPushButton("[link](url)")
         self.link_button.setObjectName("smallButton")
-        self.link_button.clicked.connect(self.apply_link)
-        for b in (
-            self.bold_button,
-            self.italic_button,
-            self.list_button,
-            self.h1_button,
-            self.h2_button,
-            self.link_button,
-        ):
+        self.link_button.clicked.connect(self.insert_link)
+        for b in (self.bold_button, self.italic_button, self.list_button, self.h1_button, self.link_button):
             toolbar.addWidget(b)
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
+        labels = QHBoxLayout()
+        left_label = QLabel("Markdown")
+        left_label.setObjectName("sectionLabel")
+        right_label = QLabel("Prévia")
+        right_label.setObjectName("sectionLabel")
+        labels.addWidget(left_label)
+        labels.addWidget(right_label)
+        layout.addLayout(labels)
+
+        self.details_splitter = QSplitter(Qt.Orientation.Horizontal, self)
         self.details_edit = QTextEdit(self)
         self.details_edit.setPlaceholderText(
-            "Escreva a descrição geral ou o conteúdo de uma subtarefa..."
+            "Escreva a descrição geral ou o conteúdo de uma subtarefa em Markdown..."
         )
-        self.details_edit.setAcceptRichText(True)
-        self.details_edit.setMinimumHeight(230)
         self.details_edit.textChanged.connect(self.on_editor_text_changed)
-        layout.addWidget(self.details_edit, stretch=2)
+        self.details_preview = QTextBrowser(self)
+        self.details_preview.setOpenExternalLinks(True)
+        self.details_splitter.addWidget(self.details_edit)
+        self.details_splitter.addWidget(self.details_preview)
+        self.details_splitter.setSizes([420, 420])
+        layout.addWidget(self.details_splitter)
 
         editor_actions = QHBoxLayout()
         self.save_description_button = QPushButton("Salvar como descrição")
@@ -950,23 +825,9 @@ class TaskEditorDialog(QDialog):
 
         self.update_due_enabled()
         self.update_custom_recurrence_visibility()
+        self.update_preview()
         self.update_subtask_actions()
         self.setStyleSheet(BASE_STYLESHEET)
-
-    def restore_parent_window(self) -> None:
-        parent = self.parentWidget()
-        if parent:
-            parent.show()
-            parent.raise_()
-            parent.activateWindow()
-
-    def reject(self) -> None:
-        self.restore_parent_window()
-        super().reject()
-
-    def closeEvent(self, event) -> None:  # type: ignore[override]
-        self.restore_parent_window()
-        super().closeEvent(event)
 
     def update_due_enabled(self) -> None:
         enabled = self.use_date_checkbox.isChecked()
@@ -984,120 +845,56 @@ class TaskEditorDialog(QDialog):
         cursor = self.details_edit.textCursor()
         return cursor.selectedText()
 
-    def toggle_bold(self) -> None:
+    def wrap_selection(self, left: str, right: str) -> None:
         cursor = self.details_edit.textCursor()
-        current_weight = cursor.charFormat().fontWeight()
-        char_format = QTextCharFormat()
-        char_format.setFontWeight(
-            QFont.Weight.Normal.value
-            if current_weight >= QFont.Weight.Bold.value
-            else QFont.Weight.Bold.value
-        )
-        cursor.mergeCharFormat(char_format)
-        self.details_edit.mergeCurrentCharFormat(char_format)
+        selected = cursor.selectedText() or "texto"
+        cursor.insertText(f"{left}{selected}{right}")
         self.details_edit.setFocus()
 
-    def toggle_italic(self) -> None:
-        cursor = self.details_edit.textCursor()
-        char_format = QTextCharFormat()
-        char_format.setFontItalic(not cursor.charFormat().fontItalic())
-        cursor.mergeCharFormat(char_format)
-        self.details_edit.mergeCurrentCharFormat(char_format)
-        self.details_edit.setFocus()
+    def wrap_bold(self) -> None:
+        self.wrap_selection("**", "**")
 
-    def toggle_list(self) -> None:
+    def wrap_italic(self) -> None:
+        self.wrap_selection("*", "*")
+
+    def insert_list(self) -> None:
         cursor = self.details_edit.textCursor()
-        current_list = cursor.currentList()
-        if current_list:
-            block_format = cursor.blockFormat()
-            block_format.setObjectIndex(-1)
-            block_format.setIndent(0)
-            cursor.setBlockFormat(block_format)
+        selected = cursor.selectedText()
+        if selected:
+            lines = selected.split("\u2029")
+            cursor.insertText("\n".join([f"- {line}" for line in lines]))
         else:
-            list_format = QTextListFormat()
-            list_format.setStyle(QTextListFormat.Style.ListDisc)
-            cursor.createList(list_format)
+            cursor.insertText("- item")
         self.details_edit.setFocus()
 
-    def apply_heading(self, level: int) -> None:
-        original_cursor = self.details_edit.textCursor()
-        selection_start = original_cursor.selectionStart()
-        selection_end = original_cursor.selectionEnd()
-        document = self.details_edit.document()
-        block = document.findBlock(selection_start)
-        last_position = max(selection_start, selection_end - 1)
-
-        original_cursor.beginEditBlock()
-        while block.isValid() and block.position() <= last_position:
-            block_cursor = QTextCursor(block)
-            block_format = block_cursor.blockFormat()
-            block_format.setHeadingLevel(level)
-            block_cursor.setBlockFormat(block_format)
-
-            block_cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
-            block_cursor.movePosition(
-                QTextCursor.MoveOperation.EndOfBlock,
-                QTextCursor.MoveMode.KeepAnchor,
-            )
-            char_format = QTextCharFormat()
-            char_format.setFontWeight(QFont.Weight.Bold.value)
-            char_format.setFontPointSize(22 if level == 1 else 18)
-            block_cursor.mergeCharFormat(char_format)
-            block = block.next()
-        original_cursor.endEditBlock()
-
-        # Recarrega o Markdown gerado para remover tamanhos herdados de textos
-        # antigos e aplicar visualmente o nível escolhido de forma consistente.
-        normalized_markdown = document.toMarkdown().rstrip()
-        self.updating_editor = True
-        document.setMarkdown(normalized_markdown)
-        self.updating_editor = False
-        restored_cursor = self.details_edit.textCursor()
-        max_position = max(0, document.characterCount() - 1)
-        restored_cursor.setPosition(min(selection_start, max_position))
-        if selection_end > selection_start:
-            restored_cursor.setPosition(
-                min(selection_end, max_position),
-                QTextCursor.MoveMode.KeepAnchor,
-            )
-        self.details_edit.setTextCursor(restored_cursor)
-        self.details_edit.setFocus()
-
-    def apply_link(self) -> None:
+    def insert_h1(self) -> None:
         cursor = self.details_edit.textCursor()
-        if not cursor.hasSelection():
-            QMessageBox.information(self, "Link", "Selecione o texto que receberá o link.")
-            return
-        url, accepted = QInputDialog.getText(
-            self,
-            "Adicionar link",
-            "Endereço:",
-            text="https://",
-        )
-        if not accepted or not url.strip():
-            return
-        char_format = QTextCharFormat()
-        char_format.setAnchor(True)
-        char_format.setAnchorHref(url.strip())
-        char_format.setForeground(QColor("#2563eb"))
-        char_format.setFontUnderline(True)
-        cursor.mergeCharFormat(char_format)
+        selected = cursor.selectedText() or "Título"
+        cursor.insertText(f"# {selected}")
         self.details_edit.setFocus()
 
-    def editor_markdown(self) -> str:
-        return self.details_edit.document().toMarkdown().rstrip()
+    def insert_link(self) -> None:
+        cursor = self.details_edit.textCursor()
+        selected = cursor.selectedText() or "link"
+        cursor.insertText(f"[{selected}](https://)")
+        self.details_edit.setFocus()
+
+    def update_preview(self) -> None:
+        self.details_preview.setHtml(markdown_to_html(self.details_edit.toPlainText()))
 
     def set_editor_text(self, text: str) -> None:
         self.updating_editor = True
-        self.details_edit.document().setMarkdown(text)
+        self.details_edit.setPlainText(text)
         self.updating_editor = False
+        self.update_preview()
 
     def on_editor_text_changed(self) -> None:
+        self.update_preview()
         if not self.updating_editor:
             self.editor_was_consumed = False
 
     def save_editor_content(self) -> None:
-        content = self.editor_markdown()
+        content = self.details_edit.toPlainText()
         if self.editing_subtask_item is not None:
             row = self.subtasks_list.itemWidget(self.editing_subtask_item)
             if row and content.strip():
@@ -1114,7 +911,7 @@ class TaskEditorDialog(QDialog):
         self.persist_changes("✓ Descrição geral e tarefa salvas.")
 
     def add_subtask_from_editor(self) -> None:
-        content = self.editor_markdown().strip()
+        content = self.details_edit.toPlainText().strip()
         if not content:
             QMessageBox.warning(self, "Aviso", "Escreva o conteúdo da subtarefa.")
             return
@@ -1256,7 +1053,7 @@ class TaskEditorDialog(QDialog):
         if not row:
             return
         if self.editing_subtask_item is None:
-            self.editor_draft = self.editor_markdown()
+            self.editor_draft = self.details_edit.toPlainText()
             self.editor_draft_was_consumed = self.editor_was_consumed
         self.load_subtask_in_editor(item)
 
@@ -1342,20 +1139,6 @@ class TodoApp(QWidget):
         self.config = ConfigStore(CONFIG_FILE)
         self.store: Optional[TaskStore] = None
         self.notified_task_ids: set[str] = set()
-        self.expanded_task_id: Optional[str] = None
-        self.details_scroll_positions: dict[str, int] = {}
-        self.async_saver = AsyncTaskSaver()
-        self.async_loader = AsyncTaskLoader()
-        self.async_save_revision = 0
-        self.async_save_timer = QTimer(self)
-        self.async_save_timer.setInterval(100)
-        self.async_save_timer.timeout.connect(self.process_async_save_results)
-        self.async_save_timer.timeout.connect(self.process_external_sync_results)
-        self.async_save_timer.start()
-        self.details_resize_timer = QTimer(self)
-        self.details_resize_timer.setSingleShot(True)
-        self.details_resize_timer.setInterval(80)
-        self.details_resize_timer.timeout.connect(self.refresh_expanded_task_sizes)
 
         self.quick_add_input = QLineEdit(self)
         self.search_input = QLineEdit(self)
@@ -1460,8 +1243,6 @@ class TodoApp(QWidget):
             lst.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             lst.customContextMenuRequested.connect(self.show_context_menu)
             lst.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-            lst.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-            lst.verticalScrollBar().setSingleStep(36)
             lst.setSpacing(8)
             lst.currentItemChanged.connect(self.on_selection_changed)
 
@@ -1627,58 +1408,20 @@ class TodoApp(QWidget):
     def reload_external_changes(self) -> None:
         if not self.store or QApplication.activeModalWidget() is not None:
             return
-        if self.expanded_task_id or self.async_saver.is_busy():
+        if not self.store.has_external_changes():
             return
-        if self.async_loader.is_busy():
+        selected_task_id = self.get_selected_task_id()
+        if not self.store.load():
+            self.set_sync_pending("Aguardando o término da sincronização externa...")
             return
-        self.async_loader.check(self.store.tasks_file, self.store._last_signature)
-
-    def process_external_sync_results(self) -> None:
-        while True:
-            try:
-                known_signature, signature, content, error = self.async_loader.results.get_nowait()
-            except Empty:
-                return
-
-            if not self.store or self.async_saver.is_busy():
-                continue
-            if self.store._last_signature != known_signature:
-                continue
-            if error or content is None:
-                continue
-
-            try:
-                raw = json.loads(content)
-                if not isinstance(raw, list):
-                    raise ValueError("O conteúdo do task.json não é uma lista.")
-                loaded_tasks = []
-                for item in raw:
-                    if isinstance(item, dict) and "id" in item and "title" in item:
-                        loaded_tasks.append(Task.from_dict(item))
-            except Exception:
-                self.set_sync_pending("Aguardando o término da sincronização externa...")
-                continue
-
-            selected_task_id = self.get_selected_task_id()
-            self.store.tasks = loaded_tasks
-            self.store.sort_tasks()
-            self.store._last_signature = signature
-            current_ids = {task.id for task in self.store.tasks}
-            self.notified_task_ids.intersection_update(current_ids)
-            self.load_tasks_into_ui(selected_task_id=selected_task_id)
-            self.set_sync_success("Tarefas do Android sincronizadas automaticamente.")
+        current_ids = {task.id for task in self.store.tasks}
+        self.notified_task_ids.intersection_update(current_ids)
+        self.load_tasks_into_ui(selected_task_id=selected_task_id)
+        self.set_sync_success("Tarefas do Android sincronizadas automaticamente.")
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         self.config.set_geometry(self.size(), self.pos())
         super().closeEvent(event)
-        app = QApplication.instance()
-        if app:
-            app.quit()
-
-    def resizeEvent(self, event) -> None:  # type: ignore[override]
-        super().resizeEvent(event)
-        if hasattr(self, "details_resize_timer"):
-            self.details_resize_timer.start()
 
     def human_due_text(self, task: Task) -> str:
         due = task.due_datetime
@@ -1775,7 +1518,8 @@ class TodoApp(QWidget):
         row = task_list.itemWidget(item) if item else None
         if not task or not row:
             return
-        row.checkbox.setChecked(not task.completed)
+        checkbox = row.layout().itemAt(0).widget()
+        checkbox.setChecked(not task.completed)
 
     def delete_selected_task(self) -> None:
         task_id = self.get_selected_task_id()
@@ -1857,43 +1601,19 @@ class TodoApp(QWidget):
             return None
         return current.data(Qt.ItemDataRole.UserRole)
 
-    def task_meta_text(self, task: Task) -> str:
-        meta_parts = []
-        details_preview = task.details_plain
-        if details_preview:
-            meta_parts.append(details_preview[:100] + ("..." if len(details_preview) > 100 else ""))
-        else:
-            meta_parts.append("Sem detalhes")
-
-        if task.subtasks:
-            done = sum(1 for subtask in task.subtasks if subtask.completed)
-            meta_parts.append(f"Subtarefas {done}/{len(task.subtasks)}")
-
-        if task.recurrence != "Sem recorrência" and task.has_due_date:
-            meta_parts.append(task.recurrence)
-
-        return " • ".join(meta_parts)
-
     def create_task_item(self, task: Task, target_list: QListWidget) -> None:
         row = TaskRow(task.id)
         row.clicked.connect(lambda task_id, lst=target_list: self.select_task_in_list(lst, task_id))
         row.double_clicked.connect(self.open_task_by_id)
-        layout = QVBoxLayout(row)
+        layout = QHBoxLayout(row)
         layout.setContentsMargins(12, 9, 12, 9)
-        layout.setSpacing(7)
-
-        summary = QWidget(row)
-        summary.setObjectName("taskSummary")
-        summary.setStyleSheet("QWidget#taskSummary { background:transparent; border:none; }")
-        summary_layout = QHBoxLayout(summary)
-        summary_layout.setContentsMargins(0, 0, 0, 0)
-        summary_layout.setSpacing(10)
+        layout.setSpacing(10)
 
         checkbox = QCheckBox()
         checkbox.setProperty("task_id", task.id)
         checkbox.setChecked(task.completed)
         checkbox.stateChanged.connect(self.toggle_task_completion)
-        summary_layout.addWidget(checkbox)
+        layout.addWidget(checkbox)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
@@ -1902,200 +1622,46 @@ class TodoApp(QWidget):
         title.setWordWrap(True)
         title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        subtitle = QLabel(self.task_meta_text(task))
+        meta_parts = []
+        details_preview = task.details_plain
+        if details_preview:
+            meta_parts.append(details_preview[:100] + ("..." if len(details_preview) > 100 else ""))
+        else:
+            meta_parts.append("Sem detalhes")
+
+        if task.subtasks:
+            done = sum(1 for s in task.subtasks if s.completed)
+            meta_parts.append(f"Subtarefas {done}/{len(task.subtasks)}")
+
+        if task.recurrence != "Sem recorrência" and task.has_due_date:
+            meta_parts.append(task.recurrence)
+
+        subtitle = QLabel(" • ".join(meta_parts))
         subtitle.setObjectName("mutedLabel")
         subtitle.setWordWrap(False)
         subtitle.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         text_col.addWidget(title)
         text_col.addWidget(subtitle)
-        summary_layout.addLayout(text_col, 1)
+        layout.addLayout(text_col, 1)
 
         date_label = QLabel(self.human_due_text(task))
         date_label.setObjectName("dateLabel")
         date_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         date_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        summary_layout.addWidget(date_label)
-
-        has_details = bool(task.details_md.strip() or task.subtasks)
-        if has_details:
-            details_button = QPushButton(
-                "Ocultar detalhes" if self.expanded_task_id == task.id else "Ver detalhes"
-            )
-            details_button.setObjectName("smallButton")
-            details_button.setMinimumWidth(105)
-            details_button.clicked.connect(
-                lambda _checked=False, task_id=task.id: self.toggle_task_details(task_id)
-            )
-            summary_layout.addWidget(details_button)
-
-        layout.addWidget(summary)
+        layout.addWidget(date_label)
 
         row.title_label = title
         row.subtitle_label = subtitle
         row.date_label = date_label
-        row.checkbox = checkbox
-        row.details_browser = None
-
-        expanded_height = 0
-        if has_details and self.expanded_task_id == task.id:
-            details_browser = QTextBrowser(row)
-            details_browser.setOpenExternalLinks(False)
-            details_browser.setOpenLinks(False)
-            details_browser.setReadOnly(True)
-            details_browser.setUndoRedoEnabled(False)
-            details_browser.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            details_browser.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse)
-            details_browser.setFrameShape(QFrame.Shape.NoFrame)
-            details_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-            details_browser.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            details_browser.verticalScrollBar().setSingleStep(20)
-            details_browser.anchorClicked.connect(
-                lambda url, task_id=task.id: self.handle_details_link(task_id, url)
-            )
-            details_browser.verticalScrollBar().valueChanged.connect(
-                lambda value, task_id=task.id: self.details_scroll_positions.__setitem__(task_id, value)
-            )
-            details_browser.setStyleSheet(
-                "QTextBrowser { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px; }"
-            )
-            details_browser.setHtml(task_details_to_html(task))
-            row.details_browser = details_browser
-            layout.addWidget(details_browser)
-            expanded_height = self.fit_details_browser(details_browser, target_list)
 
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, task.id)
-        item.setSizeHint(QSize(0, 72 + expanded_height))
+        item.setSizeHint(QSize(0, 72))
         target_list.addItem(item)
         target_list.setItemWidget(item, row)
 
         self.apply_task_style(task, row, title, subtitle, date_label)
-        if row.details_browser:
-            QTimer.singleShot(
-                0,
-                lambda current=item, lst=target_list: self.refresh_expanded_item_size(current, lst),
-            )
-            QTimer.singleShot(
-                0,
-                lambda browser=row.details_browser, task_id=task.id: browser.verticalScrollBar().setValue(
-                    self.details_scroll_positions.get(task_id, 0)
-                ),
-            )
-
-    def fit_details_browser(self, browser: QTextBrowser, task_list: QListWidget) -> int:
-        content_width = max(360, task_list.viewport().width() - 62)
-        browser.document().setTextWidth(content_width)
-        natural_height = int(browser.document().size().height()) + 32
-        available_height = max(150, task_list.viewport().height() - 100)
-        height = min(360, available_height, max(90, natural_height))
-        browser.setFixedHeight(height)
-        return height + 8
-
-    def refresh_expanded_item_size(self, item: QListWidgetItem, task_list: QListWidget) -> None:
-        row = task_list.itemWidget(item)
-        browser = row.details_browser if row else None
-        if not browser:
-            return
-        expanded_height = self.fit_details_browser(browser, task_list)
-        item.setSizeHint(QSize(0, 72 + expanded_height))
-
-    def refresh_expanded_task_sizes(self) -> None:
-        for task_list in (self.pending_list, self.completed_list):
-            for index in range(task_list.count()):
-                item = task_list.item(index)
-                row = task_list.itemWidget(item)
-                if row and row.details_browser:
-                    self.refresh_expanded_item_size(item, task_list)
-
-    def toggle_task_details(self, task_id: str) -> None:
-        if self.expanded_task_id == task_id:
-            self.details_scroll_positions.pop(task_id, None)
-        self.expanded_task_id = None if self.expanded_task_id == task_id else task_id
-        self.load_tasks_into_ui(selected_task_id=task_id)
-
-    def handle_details_link(self, task_id: str, url) -> None:
-        if url.scheme() != "willdo-subtask":
-            QDesktopServices.openUrl(url)
-            return
-        subtask_id = url.path().lstrip("/")
-        task = self.store.get(task_id) if self.store else None
-        if not task or not subtask_id:
-            return
-        for subtask in task.subtasks:
-            if subtask.id == subtask_id:
-                subtask.completed = not subtask.completed
-                task.updated_at = now_str()
-                self.refresh_open_task_details(task)
-                self.save_subtask_change_async()
-                return
-
-    def save_subtask_change_async(self) -> None:
-        if not self.store:
-            return
-        self.async_save_revision += 1
-        payload = json.dumps(
-            [task.to_dict() for task in self.store.tasks],
-            ensure_ascii=False,
-            indent=2,
-        )
-        self.set_sync_pending("Salvando alteração...")
-        self.async_saver.schedule(
-            self.store.tasks_file,
-            payload,
-            self.async_save_revision,
-        )
-
-    def process_async_save_results(self) -> None:
-        while True:
-            try:
-                revision, signature, error = self.async_saver.results.get_nowait()
-            except Empty:
-                return
-
-            if revision != self.async_save_revision:
-                continue
-            if error:
-                self.set_sync_pending(f"Não foi possível salvar no WebDAV: {error}")
-                continue
-            if self.store:
-                self.store._last_signature = signature
-            self.set_sync_success("Subtarefa salva e sincronizada.")
-
-    def refresh_open_task_details(self, task: Task) -> None:
-        for task_list in (self.pending_list, self.completed_list):
-            for index in range(task_list.count()):
-                item = task_list.item(index)
-                if item.data(Qt.ItemDataRole.UserRole) != task.id:
-                    continue
-
-                row = task_list.itemWidget(item)
-                browser = row.details_browser if row else None
-                if not row or not browser:
-                    return
-
-                scroll_position = browser.verticalScrollBar().value()
-                browser.setHtml(task_details_to_html(task))
-                expanded_height = self.fit_details_browser(browser, task_list)
-                item.setSizeHint(QSize(0, 72 + expanded_height))
-                row.subtitle_label.setText(self.task_meta_text(task))
-                self.apply_task_style(
-                    task,
-                    row,
-                    row.title_label,
-                    row.subtitle_label,
-                    row.date_label,
-                    selected=item.isSelected(),
-                )
-
-                def restore_position() -> None:
-                    value = min(scroll_position, browser.verticalScrollBar().maximum())
-                    browser.verticalScrollBar().setValue(value)
-                    self.details_scroll_positions[task.id] = value
-
-                QTimer.singleShot(0, restore_position)
-                self.status_label.setText("Subtarefa atualizada.")
-                return
 
     def select_task_in_list(self, task_list: QListWidget, task_id: str) -> None:
         for index in range(task_list.count()):
@@ -2210,7 +1776,7 @@ class TodoApp(QWidget):
                 item = lst.item(i)
                 task = self.store.get(item.data(Qt.ItemDataRole.UserRole))
                 if not task:
-                    item.setHidden(bool(needle) or bool(self.expanded_task_id))
+                    item.setHidden(bool(needle))
                     continue
                 haystack = ""
                 haystack = " ".join([
@@ -2221,11 +1787,7 @@ class TodoApp(QWidget):
                     " ".join(s.title.lower() for s in task.subtasks),
                     "concluída" if task.completed else "pendente",
                 ])
-                hidden_by_search = bool(needle) and needle not in haystack
-                hidden_by_focus = bool(
-                    self.expanded_task_id and task.id != self.expanded_task_id
-                )
-                hidden = hidden_by_search or hidden_by_focus
+                hidden = bool(needle) and needle not in haystack
                 item.setHidden(hidden)
                 if not hidden:
                     counts[key] += 1
@@ -2430,13 +1992,11 @@ class TodoApp(QWidget):
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("WillDo")
     app.setOrganizationName("Willian")
     window = TodoApp()
     window.show()
-    exit_code = app.exec()
-    return exit_code
+    return app.exec()
 
 if __name__ == "__main__":
     sys.exit(main())
