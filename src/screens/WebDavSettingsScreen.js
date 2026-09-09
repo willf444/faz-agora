@@ -123,10 +123,15 @@ export default function WebDavSettingsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16 },
-  card: { backgroundColor: '#ffffff', borderRadius: 12 },
+  card: {
+    backgroundColor: '#151515',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#292929',
+  },
   title: { fontWeight: '700', marginBottom: 4 },
-  description: { color: '#64748b', marginBottom: 14 },
-  input: { backgroundColor: '#ffffff', marginBottom: 12 },
+  description: { color: '#a3a3a3', marginBottom: 14 },
+  input: { backgroundColor: '#151515', marginBottom: 12 },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -134,5 +139,5 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   switchText: { flex: 1, paddingRight: 12 },
-  hint: { color: '#64748b', marginTop: 2 },
+  hint: { color: '#a3a3a3', marginTop: 2 },
 });

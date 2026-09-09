@@ -370,19 +370,9 @@ export default function EditTaskScreen({ route, navigation }) {
         onChangeText={setTitle}
         placeholder="Ex: Pagar fatura do cartão"
         mode="outlined"
+        outlineStyle={styles.roundedInputOutline}
         style={styles.input}
       />
-
-      <Button
-        mode="contained"
-        icon="content-save-outline"
-        onPress={saveTaskWithoutEditor}
-        loading={isSaving}
-        disabled={isSaving || Boolean(editingSubtaskId)}
-        style={styles.saveTaskButton}
-      >
-        Salvar tarefa
-      </Button>
 
       {/* Seção Data e Hora de Vencimento */}
       <Card style={styles.cardSection}>
@@ -427,7 +417,7 @@ export default function EditTaskScreen({ route, navigation }) {
 
               {/* Seletor de Recorrência */}
               <View style={styles.recurrenceRow}>
-                <Text variant="bodyMedium" style={{ color: '#475569', marginBottom: 4 }}>
+                <Text variant="bodyMedium" style={{ color: '#b5b5b5', marginBottom: 4 }}>
                   Recorrência:
                 </Text>
                 <Menu
@@ -518,6 +508,17 @@ export default function EditTaskScreen({ route, navigation }) {
               </View>
             </View>
           )}
+
+          <Button
+            mode="contained"
+            icon="content-save-outline"
+            onPress={saveTaskWithoutEditor}
+            loading={isSaving}
+            disabled={isSaving || Boolean(editingSubtaskId)}
+            style={styles.saveTaskButton}
+          >
+            Salvar tarefa
+          </Button>
         </Card.Content>
       </Card>
 
@@ -539,7 +540,7 @@ export default function EditTaskScreen({ route, navigation }) {
             iconMap={EDITOR_ICON_MAP}
             iconSize={32}
             iconGap={10}
-            iconTint="#475569"
+            iconTint="#b5b5b5"
             selectedIconTint={theme.colors.primary}
             selectedButtonStyle={styles.toolbarButtonSelected}
             onInsertLink={() => setLinkDialogVisible(true)}
@@ -719,16 +720,21 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 14,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#151515',
+  },
+  roundedInputOutline: {
+    borderRadius: 12,
   },
   saveTaskButton: {
-    marginBottom: 14,
+    marginTop: 14,
   },
   cardSection: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#151515',
     marginBottom: 14,
     borderRadius: 12,
-    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#292929',
+    elevation: 0,
   },
   switchRow: {
     flexDirection: 'row',
@@ -737,7 +743,7 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     fontWeight: '600',
-    color: '#0f172a',
+    color: '#f5f5f5',
   },
   dueConfigContainer: {
     marginTop: 8,
@@ -767,7 +773,7 @@ const styles = StyleSheet.create({
   },
   customIntervalInput: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#151515',
   },
   customUnitContainer: {
     flex: 1,
@@ -781,13 +787,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontWeight: '700',
-    color: '#0f172a',
+    color: '#f5f5f5',
   },
   editorTitle: {
     marginBottom: 10,
   },
   toolbarRow: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: '#222222',
     borderRadius: 8,
     marginBottom: 8,
     elevation: 0,
@@ -798,27 +804,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   toolbarButtonSelected: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: '#404040',
     borderRadius: 6,
   },
   richEditorFrame: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#101010',
     height: 220,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#404040',
     borderRadius: 8,
     overflow: 'hidden',
   },
   richEditor: {
     height: 218,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#101010',
   },
   editorActions: {
     gap: 6,
     marginTop: 10,
   },
   editorStatus: {
-    color: '#64748b',
+    color: '#a3a3a3',
     textAlign: 'center',
     marginTop: 2,
   },
@@ -828,9 +834,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#303030',
     borderRadius: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#151515',
   },
   subtaskActionsRow: {
     flexDirection: 'row',
@@ -841,9 +847,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   subtaskItemSelected: {
-    borderColor: '#2563eb',
+    borderColor: '#a3a3a3',
     borderWidth: 2,
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#242424',
   },
   subtaskMarkdownContainer: {
     width: '100%',
@@ -855,29 +861,29 @@ const styles = StyleSheet.create({
 
 const markdownStyles = {
   body: {
-    color: '#334155',
+    color: '#d4d4d4',
     fontSize: 14,
     lineHeight: 20,
   },
   heading1: {
-    color: '#0f172a',
+    color: '#fafafa',
     fontWeight: '700',
     fontSize: 18,
     marginVertical: 4,
   },
   heading2: {
-    color: '#0f172a',
+    color: '#f5f5f5',
     fontWeight: '600',
     fontSize: 16,
     marginVertical: 4,
   },
   code_inline: {
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#2a2a2a',
     borderRadius: 4,
     paddingHorizontal: 4,
   },
   link: {
-    color: '#2563eb',
+    color: '#86efac',
   },
 };
 
@@ -885,7 +891,7 @@ const subtaskMarkdownStyles = {
   ...markdownStyles,
   body: {
     ...markdownStyles.body,
-    color: '#1e293b',
+    color: '#e5e5e5',
     marginTop: 0,
     marginBottom: 0,
   },
@@ -899,7 +905,7 @@ const completedMarkdownStyles = {
   ...subtaskMarkdownStyles,
   body: {
     ...subtaskMarkdownStyles.body,
-    color: '#94a3b8',
+    color: '#737373',
     textDecorationLine: 'line-through',
   },
 };
@@ -918,7 +924,7 @@ const EDITOR_ICON_MAP = {
     <Text style={[styles.toolbarLabel, { color: tintColor, fontWeight: '800' }]}>N</Text>
   ),
   [actions.setItalic]: ({ tintColor }) => (
-    <Text style={[styles.toolbarLabel, { color: tintColor, fontWeight: '800' }]}>I</Text>
+    <Text style={[styles.toolbarLabel, { color: tintColor, fontStyle: 'italic', fontWeight: '600' }]}>I</Text>
   ),
   [actions.insertBulletsList]: ({ tintColor }) => (
     <Text style={[styles.toolbarLabel, { color: tintColor }]}>Lista</Text>
@@ -935,9 +941,9 @@ const EDITOR_ICON_MAP = {
 };
 
 const RICH_EDITOR_STYLE = {
-  backgroundColor: '#ffffff',
-  color: '#1e293b',
-  caretColor: '#2563eb',
-  placeholderColor: '#94a3b8',
+  backgroundColor: '#101010',
+  color: '#f5f5f5',
+  caretColor: '#f5f5f5',
+  placeholderColor: '#737373',
   contentCSSText: 'font-size: 16px; line-height: 1.45; padding: 10px 12px;',
 };

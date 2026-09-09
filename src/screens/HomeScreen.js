@@ -9,14 +9,12 @@ import {
 } from 'react-native';
 import {
   Text,
-  FAB,
   Checkbox,
   IconButton,
   Searchbar,
   SegmentedButtons,
   useTheme,
   Card,
-  Chip,
   TextInput,
   Divider,
   Button,
@@ -36,6 +34,8 @@ export default function HomeScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('pending');
   const [quickTitle, setQuickTitle] = useState('');
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasSuccessfulSync, setHasSuccessfulSync] = useState(false);
@@ -83,14 +83,52 @@ export default function HomeScreen({ navigation }) {
     }
   }, [navigation]);
 
+  const toggleQuickAdd = useCallback(() => {
+    setShowQuickAdd(current => !current);
+    setShowSearch(false);
+    setSearchQuery('');
+  }, []);
+
+  const toggleSearch = useCallback(() => {
+    setShowSearch(current => {
+      if (current) setSearchQuery('');
+      return !current;
+    });
+    setShowQuickAdd(false);
+  }, []);
+
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <View style={styles.headerActions}>
           <IconButton
+            icon="plus"
+            iconColor="#f5f5f5"
+            size={19}
+            accessibilityLabel="Nova tarefa"
+            onPress={() => navigation.navigate('EditTask')}
+            style={styles.headerIcon}
+          />
+          <IconButton
+            icon="lightning-bolt-outline"
+            iconColor={showQuickAdd ? '#090909' : '#f5f5f5'}
+            size={19}
+            accessibilityLabel="Criação rápida"
+            onPress={toggleQuickAdd}
+            style={[styles.headerIcon, showQuickAdd && styles.headerIconActive]}
+          />
+          <IconButton
+            icon="magnify"
+            iconColor={showSearch ? '#090909' : '#f5f5f5'}
+            size={19}
+            accessibilityLabel="Buscar tarefas"
+            onPress={toggleSearch}
+            style={[styles.headerIcon, showSearch && styles.headerIconActive]}
+          />
+          <IconButton
             icon="sync"
-            iconColor="#ffffff"
-            size={22}
+            iconColor="#f5f5f5"
+            size={19}
             disabled={isSyncing}
             accessibilityLabel={hasSuccessfulSync ? 'WebDAV sincronizado' : 'Sincronizar WebDAV'}
             onPress={() => syncWebDav(false)}
@@ -102,8 +140,8 @@ export default function HomeScreen({ navigation }) {
           />
           <IconButton
             icon="cog-outline"
-            iconColor="#ffffff"
-            size={22}
+            iconColor="#f5f5f5"
+            size={19}
             accessibilityLabel="Configurar WebDAV"
             onPress={() => navigation.navigate('WebDavSettings')}
             style={styles.headerIcon}
@@ -111,7 +149,7 @@ export default function HomeScreen({ navigation }) {
         </View>
       ),
     });
-  }, [hasSuccessfulSync, isSyncing, navigation, syncWebDav]);
+  }, [hasSuccessfulSync, isSyncing, navigation, showQuickAdd, showSearch, syncWebDav, toggleQuickAdd, toggleSearch]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
@@ -146,7 +184,9 @@ export default function HomeScreen({ navigation }) {
     };
 
     await storageService.addTask(newTask);
+    setHasSuccessfulSync(false);
     setQuickTitle('');
+    setShowQuickAdd(false);
     Keyboard.dismiss();
     await loadTasks();
   };
@@ -166,6 +206,7 @@ export default function HomeScreen({ navigation }) {
     updatedTask.notificationId = newNotifId;
 
     await storageService.updateTask(updatedTask);
+    setHasSuccessfulSync(false);
     await loadTasks();
   };
 
@@ -230,6 +271,7 @@ export default function HomeScreen({ navigation }) {
       await storageService.updateTask(updated);
     }
 
+    setHasSuccessfulSync(false);
     await loadTasks();
   };
 
@@ -247,6 +289,7 @@ export default function HomeScreen({ navigation }) {
               await notificationService.cancelNotification(task.notificationId);
             }
             await storageService.removeTask(task.id);
+            setHasSuccessfulSync(false);
             await loadTasks();
           },
         },
@@ -271,6 +314,7 @@ export default function HomeScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             await storageService.clearCompletedTasks();
+            setHasSuccessfulSync(false);
             await loadTasks();
           },
         },
@@ -280,6 +324,7 @@ export default function HomeScreen({ navigation }) {
 
   const toggleSubtask = async (taskId, subtaskId) => {
     await storageService.toggleSubtask(taskId, subtaskId);
+    setHasSuccessfulSync(false);
     await loadTasks();
   };
 
@@ -383,36 +428,52 @@ export default function HomeScreen({ navigation }) {
               </View>
             </View>
 
-            {/* Chips de Recorrência e Subtarefas */}
-            <View style={styles.chipsRow}>
-              {item.recurrence && item.recurrence !== 'Sem recorrência' && (
-                <Chip icon="repeat" compact style={styles.chip}>
-                  {item.recurrence}
-                </Chip>
-              )}
-
-              {hasSubtasks && (
-                <Chip icon="format-list-checks" compact style={styles.chip}>
-                  {`Subtarefas ${completedSubtasks}/${item.subtasks.length}`}
-                </Chip>
-              )}
-
-              {(hasDetails || hasSubtasks) && (
-                <Chip
-                  icon={isExpanded ? 'chevron-up' : 'chevron-down'}
-                  compact
-                  style={styles.chip}
-                  onPress={() => setExpandedTaskId(isExpanded ? null : item.id)}
-                >
-                  {isExpanded ? 'Ocultar detalhes' : 'Ver detalhes'}
-                </Chip>
-              )}
-            </View>
+            {!isExpanded && (
+              <View style={styles.indicatorsRow}>
+                {item.recurrence && item.recurrence !== 'Sem recorrência' && (
+                  <IconButton
+                    icon="repeat"
+                    size={18}
+                    iconColor="#b5b5b5"
+                    accessibilityLabel="Tarefa recorrente"
+                    onPress={() => setExpandedTaskId(item.id)}
+                    style={styles.indicatorIcon}
+                  />
+                )}
+                {hasSubtasks && (
+                  <IconButton
+                    icon="format-list-checks"
+                    size={18}
+                    iconColor="#b5b5b5"
+                    accessibilityLabel="Tarefa com subtarefas"
+                    onPress={() => setExpandedTaskId(item.id)}
+                    style={styles.indicatorIcon}
+                  />
+                )}
+              </View>
+            )}
 
             {/* Seção Expandida: Markdown e Checklist de Subtarefas */}
             {isExpanded && (
               <View style={styles.expandedSection}>
                 <Divider style={styles.divider} />
+
+                <View style={styles.expandedMetadata}>
+                  {item.recurrence && item.recurrence !== 'Sem recorrência' && (
+                    <View style={styles.metadataItem}>
+                      <IconButton icon="repeat" size={17} iconColor="#b5b5b5" style={styles.metadataIcon} />
+                      <Text variant="bodySmall" style={styles.metadataText}>{item.recurrence}</Text>
+                    </View>
+                  )}
+                  {hasSubtasks && (
+                    <View style={styles.metadataItem}>
+                      <IconButton icon="format-list-checks" size={17} iconColor="#b5b5b5" style={styles.metadataIcon} />
+                      <Text variant="bodySmall" style={styles.metadataText}>
+                        {`Subtarefas ${completedSubtasks}/${item.subtasks.length}`}
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
                 {hasDetails && (
                   <View style={styles.markdownContainer}>
@@ -460,31 +521,36 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Barra de Criação Rápida */}
-      <View style={styles.quickAddRow}>
-        <TextInput
-          placeholder="Adicionar tarefa rápida... (sem data)"
-          value={quickTitle}
-          onChangeText={setQuickTitle}
-          onSubmitEditing={handleQuickAdd}
-          returnKeyType="done"
-          mode="outlined"
-          style={styles.quickInput}
-          right={
-            quickTitle.trim() ? (
-              <TextInput.Icon icon="plus-circle" onPress={handleQuickAdd} />
-            ) : null
-          }
-        />
-      </View>
+      {showQuickAdd && (
+        <View style={styles.quickAddRow}>
+          <TextInput
+            autoFocus
+            placeholder="Crie rápido, edite depois."
+            value={quickTitle}
+            onChangeText={setQuickTitle}
+            onSubmitEditing={handleQuickAdd}
+            returnKeyType="done"
+            mode="outlined"
+            outlineStyle={styles.roundedFieldOutline}
+            style={styles.quickInput}
+            right={
+              quickTitle.trim() ? (
+                <TextInput.Icon icon="plus-circle" onPress={handleQuickAdd} />
+              ) : null
+            }
+          />
+        </View>
+      )}
 
-      {/* Busca */}
-      <Searchbar
-        placeholder="Buscar tarefas..."
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={styles.searchBar}
-      />
+      {showSearch && (
+        <Searchbar
+          autoFocus
+          placeholder="Buscar tarefas..."
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+          style={styles.searchBar}
+        />
+      )}
 
       {/* Seletor de Abas com Contadores */}
       <View style={styles.tabsHeader}>
@@ -526,25 +592,17 @@ export default function HomeScreen({ navigation }) {
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <IconButton icon="clipboard-check-outline" size={64} iconColor="#94a3b8" />
-            <Text variant="titleMedium" style={{ color: '#64748b' }}>
+            <IconButton icon="clipboard-check-outline" size={64} iconColor="#737373" />
+            <Text variant="titleMedium" style={{ color: '#a3a3a3' }}>
               {searchQuery ? 'Nenhuma tarefa encontrada' : 'Tudo em dia por aqui!'}
             </Text>
-            <Text variant="bodySmall" style={{ color: '#94a3b8', marginTop: 4 }}>
+            <Text variant="bodySmall" style={{ color: '#737373', marginTop: 4 }}>
               {filter === 'pending'
-                ? 'Toque em "Nova Tarefa Completa" ou adicione acima.'
+                ? 'Use + para criar ou o raio para anotar rapidamente.'
                 : 'Tarefas concluídas aparecerão aqui.'}
             </Text>
           </View>
         }
-      />
-
-      {/* FAB para criar tarefa completa */}
-      <FAB
-        icon="plus"
-        label="Nova Tarefa"
-        style={styles.fab}
-        onPress={() => navigation.navigate('EditTask')}
       />
     </View>
   );
@@ -554,16 +612,27 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 2,
   },
   headerIcon: {
+    width: 34,
+    height: 34,
     margin: 0,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#3a3a3a',
+    backgroundColor: '#202020',
+  },
+  headerIconActive: {
+    backgroundColor: '#f5f5f5',
+    borderColor: '#f5f5f5',
   },
   syncStatusButton: {
-    backgroundColor: '#64748b',
-    borderRadius: 18,
+    backgroundColor: '#525252',
   },
   syncStatusButtonSuccess: {
     backgroundColor: '#16a34a',
+    borderColor: '#22c55e',
   },
   container: {
     flex: 1,
@@ -574,13 +643,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   quickInput: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#151515',
     fontSize: 14,
+  },
+  roundedFieldOutline: {
+    borderRadius: 24,
   },
   searchBar: {
     marginBottom: 12,
-    backgroundColor: '#ffffff',
-    elevation: 1,
+    backgroundColor: '#151515',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#3a3a3a',
+    elevation: 0,
   },
   tabsHeader: {
     marginBottom: 10,
@@ -592,13 +667,15 @@ const styles = StyleSheet.create({
     paddingBottom: 90,
   },
   card: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#151515',
     marginBottom: 10,
     borderRadius: 12,
-    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#292929',
+    elevation: 0,
   },
   cardCompleted: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#101010',
     opacity: 0.85,
   },
   cardContent: {
@@ -615,11 +692,11 @@ const styles = StyleSheet.create({
   },
   taskTitle: {
     fontWeight: '600',
-    color: '#0f172a',
+    color: '#f5f5f5',
   },
   taskTitleCompleted: {
     textDecorationLine: 'line-through',
-    color: '#64748b',
+    color: '#737373',
   },
   dateRow: {
     flexDirection: 'row',
@@ -636,16 +713,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  chipsRow: {
+  indicatorsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 6,
+    gap: 4,
+    marginTop: 4,
     marginLeft: 38,
   },
-  chip: {
-    minHeight: 34,
-    justifyContent: 'center',
+  indicatorIcon: {
+    width: 30,
+    height: 30,
+    margin: 0,
+    borderRadius: 15,
+    backgroundColor: '#222222',
   },
   expandedSection: {
     marginTop: 8,
@@ -655,7 +734,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   sectionLabel: {
-    color: '#64748b',
+    color: '#a3a3a3',
     fontWeight: '700',
     marginBottom: 4,
   },
@@ -664,6 +743,25 @@ const styles = StyleSheet.create({
   },
   subtasksContainer: {
     marginTop: 6,
+  },
+  expandedMetadata: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
+    marginBottom: 6,
+  },
+  metadataItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metadataIcon: {
+    width: 22,
+    height: 22,
+    margin: 0,
+  },
+  metadataText: {
+    color: '#b5b5b5',
+    marginLeft: 4,
   },
   subtaskRow: {
     flexDirection: 'row',
@@ -679,40 +777,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 60,
   },
-  fab: {
-    position: 'absolute',
-    margin: 16,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#2563eb',
-  },
 });
 
 const markdownStyles = {
   body: {
-    color: '#334155',
+    color: '#d4d4d4',
     fontSize: 14,
     lineHeight: 20,
   },
   heading1: {
-    color: '#0f172a',
+    color: '#fafafa',
     fontWeight: '700',
     fontSize: 18,
     marginVertical: 4,
   },
   heading2: {
-    color: '#0f172a',
+    color: '#f5f5f5',
     fontWeight: '600',
     fontSize: 16,
     marginVertical: 4,
   },
   code_inline: {
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#2a2a2a',
     borderRadius: 4,
     paddingHorizontal: 4,
   },
   link: {
-    color: '#2563eb',
+    color: '#86efac',
   },
 };
 
@@ -720,7 +811,7 @@ const subtaskMarkdownStyles = {
   ...markdownStyles,
   body: {
     ...markdownStyles.body,
-    color: '#1e293b',
+    color: '#e5e5e5',
     marginTop: 0,
     marginBottom: 0,
   },
@@ -734,7 +825,7 @@ const completedSubtaskMarkdownStyles = {
   ...subtaskMarkdownStyles,
   body: {
     ...subtaskMarkdownStyles.body,
-    color: '#94a3b8',
+    color: '#737373',
     textDecorationLine: 'line-through',
   },
 };

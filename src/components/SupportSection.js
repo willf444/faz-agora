@@ -68,7 +68,7 @@ export default function SupportSection() {
   return (
     <Card style={styles.card}>
       <Card.Content>
-        <Text variant="titleMedium" style={styles.title}>O Faz está sendo útil para você?</Text>
+        <Text variant="titleMedium" style={styles.title}>Este aplicativo está sendo útil para você?</Text>
         <Text variant="bodySmall" style={styles.description}>
           Ele é gratuito, sem anúncios, sem rastreamento e sem venda de dados. Suas tarefas ficam no seu aparelho ou no servidor WebDAV escolhido por você.
         </Text>
@@ -146,19 +146,25 @@ export default function SupportSection() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#ffffff', borderRadius: 12, marginTop: 16 },
+  card: {
+    backgroundColor: '#151515',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#292929',
+    marginTop: 16,
+  },
   title: { fontWeight: '700', marginBottom: 5 },
-  description: { color: '#64748b', lineHeight: 18 },
+  description: { color: '#a3a3a3', lineHeight: 18 },
   invitation: { marginTop: 9, marginBottom: 14 },
   amountRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   amountButton: { flex: 1 },
-  input: { backgroundColor: '#ffffff', marginBottom: 7 },
-  emailHint: { color: '#64748b', marginBottom: 12 },
+  input: { backgroundColor: '#151515', marginBottom: 7 },
+  emailHint: { color: '#a3a3a3', marginBottom: 12 },
   error: { marginTop: 10 },
   paymentBox: { alignItems: 'stretch', marginTop: 14 },
   qrCode: { width: 210, height: 210, alignSelf: 'center', marginBottom: 8 },
-  waiting: { color: '#64748b', textAlign: 'center', marginBottom: 8 },
-  pixCode: { backgroundColor: '#ffffff', maxHeight: 92, marginBottom: 10 },
-  successBox: { backgroundColor: '#dcfce7', borderRadius: 10, padding: 14, marginTop: 14 },
-  successTitle: { color: '#166534', fontWeight: '700', marginBottom: 3 },
+  waiting: { color: '#a3a3a3', textAlign: 'center', marginBottom: 8 },
+  pixCode: { backgroundColor: '#151515', maxHeight: 92, marginBottom: 10 },
+  successBox: { backgroundColor: '#12301d', borderRadius: 10, padding: 14, marginTop: 14 },
+  successTitle: { color: '#86efac', fontWeight: '700', marginBottom: 3 },
 });
