@@ -53,8 +53,7 @@ export const notificationService = {
 
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '⏰ Faz agora!',
-          body: task.title,
+          title: `⏰ ${task.title}`,
           data: { taskId: task.id },
           sound: 'default',
         },

@@ -119,11 +119,15 @@ export default function HomeScreen({ navigation }) {
         Keyboard.dismiss();
         return true;
       }
+      if (expandedTaskId !== null) {
+        setExpandedTaskId(null);
+        return true;
+      }
       return false;
     });
 
     return () => subscription.remove();
-  }, [showQuickAdd, showSearch]);
+  }, [expandedTaskId, showQuickAdd, showSearch]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
