@@ -29,6 +29,7 @@ import { storageService } from '../services/storageService';
 import { notificationService } from '../services/notificationService';
 import { webDavService } from '../services/webDavService';
 import { calculateNextDue } from '../utils/recurrence';
+import { normalizeMarkdownFormatting } from '../utils/richText';
 
 export default function HomeScreen({ navigation }) {
   const [tasks, setTasks] = useState([]);
@@ -516,7 +517,7 @@ export default function HomeScreen({ navigation }) {
                       DETALHES:
                     </Text>
                     <Markdown style={markdownStyles}>
-                      {item.details_md}
+                      {normalizeMarkdownFormatting(item.details_md)}
                     </Markdown>
                   </View>
                 )}
@@ -539,7 +540,7 @@ export default function HomeScreen({ navigation }) {
                         />
                         <View style={styles.subtaskMarkdownContainer}>
                           <Markdown style={s.completed ? completedSubtaskMarkdownStyles : subtaskMarkdownStyles}>
-                            {s.title}
+                            {normalizeMarkdownFormatting(s.title)}
                           </Markdown>
                         </View>
                       </TouchableOpacity>

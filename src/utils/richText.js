@@ -22,8 +22,13 @@ const decodeHtmlEntities = (value) => value.replace(
   }
 );
 
+export const normalizeMarkdownFormatting = (markdown = '') => markdown
+  .replace(/(^|[^*])\*\*\*([^*\n]*?\S)[ \t]+\*\*\*(?!\*)/gm, '$1***$2*** ')
+  .replace(/(^|[^*])\*\*([^*\n]*?\S)[ \t]+\*\*(?!\*)/gm, '$1**$2** ')
+  .replace(/(^|[^*])\*([^*\n]*?\S)[ \t]+\*(?!\*)/gm, '$1*$2* ');
+
 export const markdownToEditorHtml = (markdown = '') => (
-  markdown.trim() ? markdownRenderer.render(markdown) : ''
+  markdown.trim() ? markdownRenderer.render(normalizeMarkdownFormatting(markdown)) : ''
 );
 
 export const editorHtmlToMarkdown = (html = '') => {
@@ -48,5 +53,5 @@ export const editorHtmlToMarkdown = (html = '') => {
     .replace(/\n[ \t]+/g, '\n')
     .replace(/\n{3,}/g, '\n\n');
 
-  return output.trim();
+  return normalizeMarkdownFormatting(output).trim();
 };

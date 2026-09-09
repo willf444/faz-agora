@@ -45,6 +45,7 @@ import {
 import {
   editorHtmlToMarkdown,
   markdownToEditorHtml,
+  normalizeMarkdownFormatting,
 } from '../utils/richText';
 
 export default function EditTaskScreen({ route, navigation }) {
@@ -60,7 +61,7 @@ export default function EditTaskScreen({ route, navigation }) {
   const [isSaving, setIsSaving] = useState(false);
 
   const [title, setTitle] = useState(existingTask?.title || '');
-  const initialDetails = existingTask?.details_md || '';
+  const initialDetails = normalizeMarkdownFormatting(existingTask?.details_md || '');
   const [details, setDetails] = useState(initialDetails);
   const [savedDetails, setSavedDetails] = useState(initialDetails);
   const [hasDueDate, setHasDueDate] = useState(Boolean(existingTask?.due_at));
@@ -593,7 +594,7 @@ export default function EditTaskScreen({ route, navigation }) {
                 onPress={() => selectSubtask(s)}
               >
                 <Markdown style={s.completed ? completedMarkdownStyles : subtaskMarkdownStyles}>
-                  {s.title}
+                  {normalizeMarkdownFormatting(s.title)}
                 </Markdown>
               </TouchableOpacity>
             </View>
