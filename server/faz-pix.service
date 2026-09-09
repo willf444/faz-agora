@@ -1,0 +1,21 @@
+[Unit]
+Description=Faz Pix API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/faz-pix
+EnvironmentFile=/etc/faz-pix.env
+ExecStart=/opt/faz-pix/venv/bin/uvicorn faz_pix_api:app --host 127.0.0.1 --port 8765 --proxy-headers
+Restart=on-failure
+RestartSec=3
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

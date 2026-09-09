@@ -41,7 +41,7 @@ export default function App() {
             <Stack.Screen
               name="Home"
               component={HomeScreen}
-              options={{ title: 'WillDo' }}
+              options={{ title: 'Faz' }}
             />
             <Stack.Screen
               name="EditTask"

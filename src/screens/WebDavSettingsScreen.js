@@ -4,6 +4,7 @@ import { Button, Card, Switch, Text, TextInput, useTheme } from 'react-native-pa
 
 import { notificationService } from '../services/notificationService';
 import { webDavService } from '../services/webDavService';
+import SupportSection from '../components/SupportSection';
 
 export default function WebDavSettingsScreen({ navigation }) {
   const theme = useTheme();
@@ -53,12 +54,12 @@ export default function WebDavSettingsScreen({ navigation }) {
         <Card.Content>
           <Text variant="titleMedium" style={styles.title}>Sincronização WebDAV</Text>
           <Text variant="bodySmall" style={styles.description}>
-            Informe a URL completa do arquivo task.json usado pelo WillDo no Debian.
+            Informe a URL do seu servidor WebDAV. O arquivo task.json será criado automaticamente na primeira sincronização.
           </Text>
 
           <TextInput
-            label="URL do task.json"
-            placeholder="https://servidor/caminho/task.json"
+            label="URL do servidor WebDAV"
+            placeholder="https://servidor/caminho"
             value={url}
             onChangeText={setUrl}
             autoCapitalize="none"
@@ -114,6 +115,7 @@ export default function WebDavSettingsScreen({ navigation }) {
           </Button>
         </Card.Content>
       </Card>
+      <SupportSection />
     </ScrollView>
   );
 }

@@ -15,7 +15,7 @@ export const notificationService = {
   async init() {
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'Lembretes do WillDo',
+        name: 'Lembretes do Faz',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#2563eb',
@@ -53,7 +53,7 @@ export const notificationService = {
 
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '⏰ WillDo: Lembrete',
+          title: '⏰ Faz: Lembrete',
           body: task.title,
           data: { taskId: task.id },
           sound: 'default',

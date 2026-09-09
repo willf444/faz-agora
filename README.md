@@ -1,6 +1,6 @@
-# WillDo Mobile (Android)
+# Faz (Android)
 
-Versão mobile do gerenciador de tarefas **WillDo** baseada no script desktop `willdo.py`. Desenvolvido em **React Native** com **Expo (SDK 51)** e interface em **Material Design 3**.
+Versão mobile do gerenciador de tarefas **Faz** baseada no script desktop `willdo.py`. Desenvolvido em **React Native** com **Expo (SDK 51)** e interface em **Material Design 3**.
 
 ---
 
@@ -76,11 +76,11 @@ npx eas-cli build -p android --profile preview
 
 ---
 
-## ☁️ Conectar o APK ao WillDo do Debian
+## ☁️ Conectar o APK ao Faz do Debian
 
 1. No Debian, escolha como diretório de tarefas uma pasta WebDAV montada. O desktop usará o arquivo `task.json` dessa pasta e perceberá alterações externas automaticamente.
 2. No APK, toque na engrenagem do cabeçalho.
-3. Informe a URL WebDAV completa desse mesmo `task.json`, o usuário e a senha.
+3. Informe a URL da pasta no servidor WebDAV, o usuário e a senha. O aplicativo cria o `task.json` automaticamente na primeira sincronização.
 4. Toque em **Salvar e sincronizar**.
 
 Use preferencialmente uma URL HTTPS. O primeiro sync une as tarefas existentes nos dois lados; nos próximos, o aplicativo considera a última sincronização para propagar também as exclusões.

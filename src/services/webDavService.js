@@ -9,6 +9,17 @@ const BASELINE_KEY = '@willdo_webdav_baseline';
 const LAST_SYNC_KEY = '@willdo_webdav_last_success';
 const REQUEST_TIMEOUT_MS = 20000;
 
+function normalizeWebDavServerUrl(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/task\.json$/i, '');
+}
+
+function taskFileUrl(serverUrl) {
+  return `${normalizeWebDavServerUrl(serverUrl)}/task.json`;
+}
+
 function encodeBasicAuth(username, password) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   const utf8Value = encodeURIComponent(`${username}:${password}`).replace(
@@ -194,7 +205,7 @@ export const webDavService = {
     }
     const password = await SecureStore.getItemAsync(PASSWORD_KEY);
     return {
-      url: config.url || '',
+      url: normalizeWebDavServerUrl(config.url),
       username: config.username || '',
       autoSync: config.autoSync !== false,
       hasPassword: Boolean(password),
@@ -202,7 +213,7 @@ export const webDavService = {
   },
 
   async saveConfig({ url, username, password, autoSync }) {
-    const normalizedUrl = url.trim();
+    const normalizedUrl = normalizeWebDavServerUrl(url);
     const normalizedUsername = username.trim();
     if (!/^https?:\/\//i.test(normalizedUrl)) {
       throw new Error('Informe a URL completa do task.json, começando com http:// ou https://.');
@@ -243,7 +254,8 @@ export const webDavService = {
       Authorization: `Basic ${encodeBasicAuth(config.username, password)}`,
       Accept: 'application/json',
     };
-    const response = await request(config.url, { method: 'GET', headers });
+    const remoteTaskUrl = taskFileUrl(config.url);
+    const response = await request(remoteTaskUrl, { method: 'GET', headers });
     let remoteTasks = [];
     let etag = null;
 
@@ -278,7 +290,7 @@ export const webDavService = {
         'Content-Type': 'application/json; charset=utf-8',
       };
       if (etag) putHeaders['If-Match'] = etag;
-      const putResponse = await request(config.url, {
+      const putResponse = await request(remoteTaskUrl, {
         method: 'PUT',
         headers: putHeaders,
         body: JSON.stringify(mergedTasks.map(taskWithoutLocalFields), null, 2),
@@ -304,5 +316,7 @@ export const webDavService = {
 export const webDavInternals = {
   mergeTasks,
   normalizeRemoteTask,
+  normalizeWebDavServerUrl,
+  taskFileUrl,
   taskWithoutLocalFields,
 };

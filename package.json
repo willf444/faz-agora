@@ -1,13 +1,14 @@
 {
   "name": "willdo-mobile",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:apk": "eas build -p android --profile preview"
+    "build:apk": "npx eas-cli build -p android --profile preview",
+    "build:aab": "npx eas-cli build -p android --profile production"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.0",
@@ -17,6 +18,7 @@
     "@react-navigation/native-stack": "^6.9.26",
     "date-fns": "^3.6.0",
     "expo": "~51.0.0",
+    "expo-clipboard": "~6.0.3",
     "expo-crypto": "~13.0.2",
     "expo-font": "~12.0.10",
     "expo-notifications": "~0.28.1",
