@@ -6,6 +6,7 @@ import {
   Alert,
   TouchableOpacity,
   Keyboard,
+  BackHandler,
 } from 'react-native';
 import {
   Text,
@@ -83,6 +84,13 @@ export default function HomeScreen({ navigation }) {
     }
   }, [navigation]);
 
+  const autoSyncWebDav = useCallback(async () => {
+    const config = await webDavService.getConfig();
+    if (config.autoSync && config.url && config.username && config.hasPassword) {
+      await syncWebDav(true);
+    }
+  }, [syncWebDav]);
+
   const toggleQuickAdd = useCallback(() => {
     setShowQuickAdd(current => !current);
     setShowSearch(false);
@@ -96,6 +104,26 @@ export default function HomeScreen({ navigation }) {
     });
     setShowQuickAdd(false);
   }, []);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (showSearch) {
+        setShowSearch(false);
+        setSearchQuery('');
+        Keyboard.dismiss();
+        return true;
+      }
+      if (showQuickAdd) {
+        setShowQuickAdd(false);
+        setQuickTitle('');
+        Keyboard.dismiss();
+        return true;
+      }
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, [showQuickAdd, showSearch]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -154,14 +182,11 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
       await loadTasks();
-      const config = await webDavService.getConfig();
       setHasSuccessfulSync(await webDavService.hasSuccessfulSync());
-      if (config.autoSync && config.url && config.username && config.hasPassword) {
-        await syncWebDav(true);
-      }
+      await autoSyncWebDav();
     });
     return unsubscribe;
-  }, [navigation, loadTasks, syncWebDav]);
+  }, [navigation, loadTasks, autoSyncWebDav]);
 
   // Criação rápida sem data (equivalente ao quick_add de willdo.py)
   const handleQuickAdd = async () => {
@@ -189,6 +214,7 @@ export default function HomeScreen({ navigation }) {
     setShowQuickAdd(false);
     Keyboard.dismiss();
     await loadTasks();
+    void autoSyncWebDav();
   };
 
   const advanceRecurringTask = async (task) => {
@@ -208,6 +234,7 @@ export default function HomeScreen({ navigation }) {
     await storageService.updateTask(updatedTask);
     setHasSuccessfulSync(false);
     await loadTasks();
+    void autoSyncWebDav();
   };
 
   const toggleTask = async (task) => {
@@ -273,6 +300,7 @@ export default function HomeScreen({ navigation }) {
 
     setHasSuccessfulSync(false);
     await loadTasks();
+    void autoSyncWebDav();
   };
 
   const deleteTask = (task) => {
@@ -291,6 +319,7 @@ export default function HomeScreen({ navigation }) {
             await storageService.removeTask(task.id);
             setHasSuccessfulSync(false);
             await loadTasks();
+            void autoSyncWebDav();
           },
         },
       ]
@@ -316,6 +345,7 @@ export default function HomeScreen({ navigation }) {
             await storageService.clearCompletedTasks();
             setHasSuccessfulSync(false);
             await loadTasks();
+            void autoSyncWebDav();
           },
         },
       ]
@@ -326,6 +356,7 @@ export default function HomeScreen({ navigation }) {
     await storageService.toggleSubtask(taskId, subtaskId);
     setHasSuccessfulSync(false);
     await loadTasks();
+    void autoSyncWebDav();
   };
 
   // Filtragem de tarefas
@@ -548,6 +579,11 @@ export default function HomeScreen({ navigation }) {
           placeholder="Buscar tarefas..."
           onChangeText={setSearchQuery}
           value={searchQuery}
+          onClearIconPress={() => {
+            setSearchQuery('');
+            setShowSearch(false);
+            Keyboard.dismiss();
+          }}
           style={styles.searchBar}
         />
       )}
@@ -664,7 +700,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   listContent: {
-    paddingBottom: 90,
+    paddingBottom: 12,
   },
   card: {
     backgroundColor: '#151515',
