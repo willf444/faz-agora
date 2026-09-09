@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
   Modal,
   SafeAreaView,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import {
   TextInput,
@@ -82,6 +83,7 @@ export default function EditTaskScreen({ route, navigation }) {
   const [detailsEditorOpen, setDetailsEditorOpen] = useState(false);
   const [editorOpenSnapshot, setEditorOpenSnapshot] = useState(initialDetails);
   const [editorSessionKey, setEditorSessionKey] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   // UI States
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -94,6 +96,18 @@ export default function EditTaskScreen({ route, navigation }) {
   const parsedCustomRecurrence = parseCustomRecurrence(recurrence);
   const isCustomRecurrence = recurrence === 'Personalizado' || Boolean(parsedCustomRecurrence);
   const selectedRecurrenceOption = isCustomRecurrence ? 'Personalizado' : recurrence;
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   const updateCustomRecurrence = (interval, unit) => {
     setRecurrence(formatCustomRecurrence(interval, unit));
@@ -706,42 +720,44 @@ export default function EditTaskScreen({ route, navigation }) {
             </View>
           )}
 
-          <View style={styles.fullScreenActions}>
-            <Button
-              mode="outlined"
-              icon="content-save-outline"
-              onPress={saveEditorContent}
-              loading={isSaving}
-              disabled={isSaving}
-            >
-              {editingSubtaskId ? 'Salvar alterações da subtarefa' : 'Salvar como descrição'}
-            </Button>
-            {editingSubtaskId ? (
+          {!keyboardVisible && (
+            <View style={styles.fullScreenActions}>
               <Button
-                mode="text"
-                icon="close"
-                onPress={() => {
-                  finishSubtaskEdit('Edição cancelada.');
-                  setSelectedSubtaskId(null);
-                }}
-              >
-                Cancelar edição
-              </Button>
-            ) : (
-              <Button
-                mode="contained"
-                icon="format-list-checks"
-                onPress={addSubtaskFromEditor}
+                mode="outlined"
+                icon="content-save-outline"
+                onPress={saveEditorContent}
                 loading={isSaving}
-                disabled={isSaving || !details.trim()}
+                disabled={isSaving}
               >
-                Adicionar como subtarefa
+                {editingSubtaskId ? 'Salvar alterações da subtarefa' : 'Salvar como descrição'}
               </Button>
-            )}
-            <Text variant="bodySmall" style={styles.editorStatus}>
-              {editorStatus}
-            </Text>
-          </View>
+              {editingSubtaskId ? (
+                <Button
+                  mode="text"
+                  icon="close"
+                  onPress={() => {
+                    finishSubtaskEdit('Edição cancelada.');
+                    setSelectedSubtaskId(null);
+                  }}
+                >
+                  Cancelar edição
+                </Button>
+              ) : (
+                <Button
+                  mode="contained"
+                  icon="format-list-checks"
+                  onPress={addSubtaskFromEditor}
+                  loading={isSaving}
+                  disabled={isSaving || !details.trim()}
+                >
+                  Adicionar como subtarefa
+                </Button>
+              )}
+              <Text variant="bodySmall" style={styles.editorStatus}>
+                {editorStatus}
+              </Text>
+            </View>
+          )}
         </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
