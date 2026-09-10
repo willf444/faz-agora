@@ -1588,6 +1588,136 @@ class TaskEditorDialog(QDialog):
             self.update_subtask_item_height(self.subtasks_list.item(index))
 
 
+class ReminderDialog(QDialog):
+    def __init__(self, task_title: str, due_text: str):
+        super().__init__(None)
+        self.setWindowTitle("Faz agora!")
+        self.setWindowFlags(
+            Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedWidth(620)
+        self.setMinimumHeight(280)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        card = QFrame(self)
+        card.setObjectName("reminderCard")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+
+        header = QFrame(card)
+        header.setObjectName("reminderHeader")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(18, 10, 10, 10)
+        header_layout.setSpacing(10)
+        app_name = QLabel("Faz agora!", header)
+        app_name.setObjectName("reminderAppName")
+        close_button = QPushButton("×", header)
+        close_button.setObjectName("reminderClose")
+        close_button.setFixedSize(30, 30)
+        close_button.clicked.connect(self.reject)
+        header_layout.addWidget(app_name)
+        header_layout.addStretch()
+        header_layout.addWidget(close_button)
+        card_layout.addWidget(header)
+
+        body = QFrame(card)
+        body.setObjectName("reminderBody")
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 18, 20, 18)
+        body_layout.setSpacing(12)
+
+        self.task_text = QTextBrowser(body)
+        self.task_text.setObjectName("reminderText")
+        self.task_text.setReadOnly(True)
+        self.task_text.setOpenExternalLinks(False)
+        self.task_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.task_text.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.task_text.setMinimumHeight(110)
+        self.task_text.setMaximumHeight(230)
+        safe_title = html.escape(task_title).replace("\n", "<br>")
+        self.task_text.setHtml(
+            f'<div style="font-size:18px;font-weight:700;color:#f5f5f5;line-height:1.4;">'
+            f'⏰&nbsp;&nbsp;{safe_title}</div>'
+        )
+        due_label = QLabel(due_text, body)
+        due_label.setObjectName("reminderDue")
+        due_label.setWordWrap(True)
+        ok_button = QPushButton("OK", body)
+        ok_button.setMinimumWidth(90)
+        ok_button.clicked.connect(self.accept)
+
+        body_layout.addWidget(self.task_text, 1)
+        body_layout.addWidget(due_label)
+        action_row = QHBoxLayout()
+        action_row.addStretch()
+        action_row.addWidget(ok_button)
+        body_layout.addLayout(action_row)
+        card_layout.addWidget(body)
+        outer.addWidget(card)
+
+        self.setStyleSheet(
+            BASE_STYLESHEET
+            + """
+            QFrame#reminderCard { background:transparent; border:none; }
+            QFrame#reminderHeader {
+                background:#f5f5f5;
+                border-top-left-radius:12px;
+                border-top-right-radius:12px;
+            }
+            QLabel#reminderAppName {
+                color:#111111;
+                background:transparent;
+                font-size:16px;
+                font-weight:700;
+            }
+            QPushButton#reminderClose {
+                color:#111111;
+                background:transparent;
+                border:none;
+                border-radius:15px;
+                padding:0;
+                font-size:22px;
+            }
+            QPushButton#reminderClose:hover { background:#dedede; }
+            QFrame#reminderBody {
+                background:#151515;
+                border:1px solid #404040;
+                border-top:none;
+                border-bottom-left-radius:12px;
+                border-bottom-right-radius:12px;
+            }
+            QTextBrowser#reminderText {
+                color:#f5f5f5;
+                background:#151515;
+                border:none;
+                padding:0;
+            }
+            QLabel#reminderDue {
+                color:#b5b5b5;
+                background:transparent;
+                font-size:13px;
+            }
+            """
+        )
+
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        screen = QGuiApplication.primaryScreen()
+        if screen:
+            available = screen.availableGeometry()
+            self.move(
+                available.right() - self.width() - 24,
+                available.bottom() - self.height() - 24,
+            )
+
+
 class SupportDialog(QDialog):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -1608,23 +1738,24 @@ class SupportDialog(QDialog):
 
         title = QLabel("Faz agora!")
         title.setObjectName("appTitle")
-        subtitle = QLabel("Um projeto independente de Willian Ferreira")
+        subtitle = QLabel("Um projeto independente")
         subtitle.setObjectName("appSubtitle")
         layout.addWidget(title)
         layout.addWidget(subtitle)
 
         description = QLabel(
-            "O Faz agora! para Linux é gratuito, sem anúncios, rastreamento ou venda de dados. "
-            "Suas tarefas ficam neste computador ou no servidor WebDAV escolhido por você."
+            "Este projeto é de um desenvolvedor independente e precisa da sua colaboração. "
+            "Todo o código está disponível gratuitamente."
         )
         description.setWordWrap(True)
         description.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(description)
 
         android_text = QLabel(
-            "A versão para Android está pronta e sincroniza com o mesmo arquivo. Para publicá-la "
-            "na Play Store, é necessário pagar a taxa de $25, que pode chegar perto de R$ 200 "
-            "após conversão, IOF e demais cobranças."
+            "Um aplicativo para Android foi construído e será disponibilizado para sincronizar "
+            "as tarefas. Somente o cadastro na Play Store custa $25 — vinte e cinco dólares —, "
+            "o que pode chegar perto de R$ 200 após conversão e impostos. Sendo assim, o projeto "
+            "precisa de apoiadores para dar esse segundo passo."
         )
         android_text.setWordWrap(True)
         android_text.setObjectName("mutedLabel")
@@ -1632,10 +1763,18 @@ class SupportDialog(QDialog):
         layout.addWidget(android_text)
 
         invitation = QLabel(
-            "Se este aplicativo é útil para você, considere apoiar esta primeira publicação."
+            "Teste e use à vontade no seu Linux. Espero que o aplicativo ajude você a se manter "
+            "mais organizado e facilite sua vida."
         )
         invitation.setWordWrap(True)
         layout.addWidget(invitation)
+
+        closing_message = QLabel(
+            "Desenvolvedor: Willian Ferreira"
+        )
+        closing_message.setWordWrap(True)
+        closing_message.setObjectName("mutedLabel")
+        layout.addWidget(closing_message)
 
         self.progress_label = QLabel("Meta inicial: carregando...")
         self.progress_label.setObjectName("sectionLabel")
@@ -1878,6 +2017,7 @@ class TodoApp(QWidget):
         self.store: Optional[TaskStore] = None
         self.notified_task_ids: set[str] = set()
         self.last_notified_task_id: Optional[str] = None
+        self.reminder_dialogs: list[ReminderDialog] = []
         self.allow_quit = False
         self.expanded_task_id: Optional[str] = None
         self.details_scroll_positions: dict[str, int] = {}
@@ -2330,7 +2470,6 @@ class TodoApp(QWidget):
     def show_main_window(self) -> None:
         self.showNormal()
         self.raise_()
-        self.activateWindow()
 
     def exit_application(self) -> None:
         self.allow_quit = True
@@ -2348,13 +2487,30 @@ class TodoApp(QWidget):
             self.show_main_window()
 
     def open_last_notification(self) -> None:
+        self.open_notification(self.last_notified_task_id)
+
+    def open_notification(self, task_id: Optional[str]) -> None:
         self.show_main_window()
-        task = self.store.get(self.last_notified_task_id) if self.store and self.last_notified_task_id else None
+        task = self.store.get(task_id) if self.store and task_id else None
         if task:
             self.load_tasks_into_ui(
                 selected_task_id=task.id,
                 switch_to_completed=task.completed,
             )
+
+    def show_reminder(self, task: Task) -> None:
+        dialog = ReminderDialog(task.title, self.human_due_text(task))
+        self.reminder_dialogs.append(dialog)
+        dialog.accepted.connect(lambda task_id=task.id: self.open_notification(task_id))
+
+        def release_dialog() -> None:
+            if dialog in self.reminder_dialogs:
+                self.reminder_dialogs.remove(dialog)
+            dialog.deleteLater()
+
+        dialog.finished.connect(release_dialog)
+        dialog.show()
+        dialog.raise_()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -3118,18 +3274,7 @@ class TodoApp(QWidget):
 
         for task in due_now:
             self.last_notified_task_id = task.id
-            title = "Faz agora!"
-            message = f"⏰ {task.title}\n{self.human_due_text(task)}"
-            if self.tray_icon.isVisible() and QSystemTrayIcon.supportsMessages():
-                self.tray_icon.showMessage(
-                    title,
-                    message,
-                    QSystemTrayIcon.MessageIcon.NoIcon,
-                    10000,
-                )
-            else:
-                QMessageBox.information(self, title, message)
-                self.open_last_notification()
+            self.show_reminder(task)
 
 def main() -> int:
     app = QApplication(sys.argv)
