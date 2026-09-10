@@ -82,6 +82,7 @@ export default function EditTaskScreen({ route, navigation }) {
     'Use os botões acima para salvar o conteúdo.'
   );
   const [detailsEditorOpen, setDetailsEditorOpen] = useState(false);
+  const [editorPurpose, setEditorPurpose] = useState('details');
   const [editorOpenSnapshot, setEditorOpenSnapshot] = useState(initialDetails);
   const [editorSessionKey, setEditorSessionKey] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -217,22 +218,9 @@ export default function EditTaskScreen({ route, navigation }) {
     }
   };
 
-  const addSubtaskFromEditor = async () => {
-    const trimmed = details.trim();
-    if (!trimmed) return;
-    const nextSubtasks = [
-      ...subtasks,
-      { id: Crypto.randomUUID(), title: trimmed, completed: false },
-    ];
-    if (!await persistTask(savedDetails, nextSubtasks)) return;
-    setSubtasks(nextSubtasks);
-    setDetails(savedDetails);
-    setDetailsEditorOpen(false);
-    setEditorStatus('✓ Subtarefa adicionada e tarefa salva.');
-  };
-
   const finishSubtaskEdit = (status) => {
     setEditingSubtaskId(null);
+    setEditorPurpose('details');
     setDetails(savedDetails);
     setDetailsEditorOpen(false);
     setLinkDialogVisible(false);
@@ -244,17 +232,34 @@ export default function EditTaskScreen({ route, navigation }) {
       Alert.alert('Aviso', 'Digite o nome da tarefa antes de abrir os detalhes.');
       return;
     }
+    setEditorPurpose('details');
     setEditingSubtaskId(null);
     setDetails(savedDetails);
     setEditorOpenSnapshot(savedDetails);
     setEditorSessionKey(current => current + 1);
-    setEditorStatus('Edite e escolha como salvar o conteúdo.');
+    setEditorStatus('Edite a descrição da tarefa.');
+    setDetailsEditorOpen(true);
+  };
+
+  const openNewSubtaskEditor = () => {
+    if (!title.trim()) {
+      Alert.alert('Aviso', 'Digite o nome da tarefa antes de criar uma subtarefa.');
+      return;
+    }
+    setSelectedSubtaskId(null);
+    setEditingSubtaskId(null);
+    setEditorPurpose('newSubtask');
+    setDetails('');
+    setEditorOpenSnapshot('');
+    setEditorSessionKey(current => current + 1);
+    setEditorStatus('Escreva o conteúdo da nova subtarefa.');
     setDetailsEditorOpen(true);
   };
 
   const editSubtask = (subtask) => {
     setSelectedSubtaskId(subtask.id);
     setEditingSubtaskId(subtask.id);
+    setEditorPurpose('editSubtask');
     setDetails(subtask.title);
     setEditorOpenSnapshot(subtask.title);
     setEditorSessionKey(current => current + 1);
@@ -277,6 +282,7 @@ export default function EditTaskScreen({ route, navigation }) {
     setDetailsEditorOpen(false);
     setLinkDialogVisible(false);
     setEditingSubtaskId(null);
+    setEditorPurpose('details');
     setDetails(savedDetails);
   };
 
@@ -291,8 +297,9 @@ export default function EditTaskScreen({ route, navigation }) {
       return;
     }
 
+    const editingDescription = editorPurpose === 'details';
     Alert.alert(
-      'Descartar detalhes da tarefa?',
+      editingDescription ? 'Descartar alterações da descrição?' : 'Descartar alterações da subtarefa?',
       'As alterações feitas no editor ainda não foram salvas.',
       [
         { text: 'Não', style: 'cancel' },
@@ -319,7 +326,23 @@ export default function EditTaskScreen({ route, navigation }) {
   };
 
   const saveEditorContent = async () => {
-    if (editingSubtaskId) {
+    if (editorPurpose === 'newSubtask') {
+      const trimmed = details.trim();
+      if (!trimmed) {
+        Alert.alert('Aviso', 'Escreva o conteúdo da subtarefa.');
+        return;
+      }
+      const nextSubtasks = [
+        ...subtasks,
+        { id: Crypto.randomUUID(), title: trimmed, completed: false },
+      ];
+      if (!await persistTask(savedDetails, nextSubtasks)) return;
+      setSubtasks(nextSubtasks);
+      finishSubtaskEdit('✓ Subtarefa adicionada e tarefa salva.');
+      return;
+    }
+
+    if (editorPurpose === 'editSubtask' && editingSubtaskId) {
       const trimmed = details.trim();
       if (!trimmed) {
         Alert.alert('Aviso', 'Escreva o conteúdo da subtarefa.');
@@ -545,7 +568,7 @@ export default function EditTaskScreen({ route, navigation }) {
             <Text variant="bodyMedium" style={styles.detailsLauncherText}>
               {savedDetails.trim()
                 ? 'Toque para visualizar ou editar a descrição em tela inteira.'
-                : 'Toque para escrever uma descrição ou criar uma subtarefa.'}
+                : 'Toque para escrever a descrição da tarefa.'}
             </Text>
           </Card.Content>
         </Card>
@@ -554,9 +577,20 @@ export default function EditTaskScreen({ route, navigation }) {
       {/* Seção de Subtarefas */}
       <Card style={styles.cardSection}>
         <Card.Content>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Subtarefas ({subtasks.filter(s => s.completed).length}/{subtasks.length})
-          </Text>
+          <View style={styles.subtasksHeader}>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Subtarefas ({subtasks.filter(s => s.completed).length}/{subtasks.length})
+            </Text>
+            <IconButton
+              icon="plus"
+              size={22}
+              mode="contained"
+              accessibilityLabel="Adicionar subtarefa"
+              disabled={isSaving}
+              onPress={openNewSubtaskEditor}
+              style={styles.addSubtaskButton}
+            />
+          </View>
 
           {subtasks.map((s) => (
             <View
@@ -643,7 +677,11 @@ export default function EditTaskScreen({ route, navigation }) {
               onPress={requestCloseDetailsEditor}
             />
             <Text variant="titleLarge" style={styles.fullScreenTitle}>
-              {editingSubtaskId ? 'Editar subtarefa' : 'Detalhes da Tarefa'}
+              {editorPurpose === 'details'
+                ? 'Detalhes da Tarefa'
+                : editorPurpose === 'editSubtask'
+                  ? 'Editar subtarefa'
+                  : 'Nova subtarefa'}
             </Text>
           </View>
 
@@ -656,8 +694,12 @@ export default function EditTaskScreen({ route, navigation }) {
               useContainer={false}
               scrollEnabled
               nestedScrollEnabled
-              placeholder="Escreva a descrição geral ou uma subtarefa..."
+              placeholder={editorPurpose === 'details'
+                ? 'Escreva a descrição da tarefa...'
+                : 'Escreva a subtarefa...'}
               onChange={handleEditorChange}
+              autoCorrect
+              autoCapitalize="sentences"
               pasteAsPlainText
               defaultHttps
               style={styles.fullScreenRichEditor}
@@ -730,9 +772,13 @@ export default function EditTaskScreen({ route, navigation }) {
                 loading={isSaving}
                 disabled={isSaving}
               >
-                {editingSubtaskId ? 'Salvar alterações da subtarefa' : 'Salvar como descrição'}
+                {editorPurpose === 'details'
+                  ? 'Salvar descrição'
+                  : editorPurpose === 'editSubtask'
+                    ? 'Salvar alterações da subtarefa'
+                    : 'Salvar como subtarefa'}
               </Button>
-              {editingSubtaskId ? (
+              {editorPurpose === 'editSubtask' && (
                 <Button
                   mode="text"
                   icon="close"
@@ -742,16 +788,6 @@ export default function EditTaskScreen({ route, navigation }) {
                   }}
                 >
                   Cancelar edição
-                </Button>
-              ) : (
-                <Button
-                  mode="contained"
-                  icon="format-list-checks"
-                  onPress={addSubtaskFromEditor}
-                  loading={isSaving}
-                  disabled={isSaving || !details.trim()}
-                >
-                  Adicionar como subtarefa
                 </Button>
               )}
               <Text variant="bodySmall" style={styles.editorStatus}>
@@ -962,6 +998,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
+  subtasksHeader: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addSubtaskButton: {
+    width: 38,
+    height: 38,
+    margin: 0,
+    backgroundColor: '#2a2a2a',
+  },
   subtaskItemRow: {
     width: '100%',
     paddingVertical: 4,
@@ -1076,5 +1124,6 @@ const RICH_EDITOR_STYLE = {
   color: '#f5f5f5',
   caretColor: '#f5f5f5',
   placeholderColor: '#737373',
+  initialCSSText: ':root { color-scheme: dark; } ::selection { background: #525252; color: #ffffff; }',
   contentCSSText: 'font-size: 16px; line-height: 1.45; padding: 10px 12px;',
 };
