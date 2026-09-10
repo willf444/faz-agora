@@ -42,6 +42,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QProgressBar,
     QSystemTrayIcon,
+    QScrollArea,
     QAbstractItemView,
     QInputDialog,
     QTextBrowser,
@@ -1589,7 +1590,7 @@ class TaskEditorDialog(QDialog):
 
 
 class ReminderDialog(QDialog):
-    def __init__(self, task_title: str, due_text: str):
+    def __init__(self, task_title: str, due_text: str, details_md: str = ""):
         super().__init__(None)
         self.setWindowTitle("Faz agora!")
         self.setWindowFlags(
@@ -1643,9 +1644,15 @@ class ReminderDialog(QDialog):
         self.task_text.setMinimumHeight(110)
         self.task_text.setMaximumHeight(230)
         safe_title = html.escape(task_title).replace("\n", "<br>")
+        details_section = ""
+        if details_md.strip():
+            details_section = (
+                '<div style="font-size:14px;color:#dedede;line-height:1.45;">'
+                f'{markdown_fragment(details_md)}</div>'
+            )
         self.task_text.setHtml(
             f'<div style="font-size:18px;font-weight:700;color:#f5f5f5;line-height:1.4;">'
-            f'⏰&nbsp;&nbsp;{safe_title}</div>'
+            f'⏰&nbsp;&nbsp;{safe_title}</div>{details_section}'
         )
         due_label = QLabel(due_text, body)
         due_label.setObjectName("reminderDue")
@@ -1724,7 +1731,7 @@ class SupportDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Sobre o Faz agora!")
         self.setMinimumSize(620, 650)
-        self.resize(680, 700)
+        self.resize(700, 740)
         self.network = QNetworkAccessManager(self)
         self.payment_id = ""
         self.status_key = ""
@@ -1733,9 +1740,18 @@ class SupportDialog(QDialog):
         self.poll_timer.setInterval(6000)
         self.poll_timer.timeout.connect(self.check_payment)
 
-        layout = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        content = QWidget(self.scroll_area)
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 22, 24, 20)
         layout.setSpacing(12)
+        self.scroll_area.setWidget(content)
+        root_layout.addWidget(self.scroll_area)
 
         title = QLabel("Faz agora!")
         title.setObjectName("appTitle")
@@ -1834,6 +1850,8 @@ class SupportDialog(QDialog):
         payment_layout.setContentsMargins(0, 4, 0, 0)
         self.qr_label = QLabel(self.payment_box)
         self.qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.qr_label.setFixedSize(230, 230)
+        self.qr_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.qr_label.hide()
         self.payment_status = QLabel("")
         self.payment_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1844,7 +1862,7 @@ class SupportDialog(QDialog):
         self.copy_button = QPushButton("Copiar código Pix")
         self.copy_button.setObjectName("secondaryButton")
         self.copy_button.clicked.connect(self.copy_pix)
-        payment_layout.addWidget(self.qr_label)
+        payment_layout.addWidget(self.qr_label, 0, Qt.AlignmentFlag.AlignHCenter)
         payment_layout.addWidget(self.payment_status)
         payment_layout.addWidget(self.pix_code)
         payment_layout.addWidget(self.copy_button)
@@ -1960,13 +1978,17 @@ class SupportDialog(QDialog):
             loaded = False
         if loaded:
             self.qr_label.setPixmap(
-                pixmap.scaled(190, 190, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                pixmap.scaled(220, 220, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             )
             self.qr_label.show()
         else:
             self.qr_label.hide()
         self.payment_status.setText("Aguardando o pagamento...")
         self.payment_box.show()
+        QTimer.singleShot(
+            0,
+            lambda: self.scroll_area.ensureWidgetVisible(self.qr_label, 20, 20),
+        )
         self.poll_timer.start()
 
     def copy_pix(self) -> None:
@@ -2515,7 +2537,7 @@ class TodoApp(QWidget):
             )
 
     def show_reminder(self, task: Task) -> None:
-        dialog = ReminderDialog(task.title, self.human_due_text(task))
+        dialog = ReminderDialog(task.title, self.human_due_text(task), task.details_md)
         self.reminder_dialogs.append(dialog)
         dialog.accepted.connect(lambda task_id=task.id: self.open_notification(task_id))
 
