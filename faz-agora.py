@@ -1614,7 +1614,7 @@ class SupportDialog(QDialog):
         layout.addWidget(subtitle)
 
         description = QLabel(
-            "O Faz agora! para Debian é gratuito, sem anúncios, rastreamento ou venda de dados. "
+            "O Faz agora! para Linux é gratuito, sem anúncios, rastreamento ou venda de dados. "
             "Suas tarefas ficam neste computador ou no servidor WebDAV escolhido por você."
         )
         description.setWordWrap(True)
@@ -1877,6 +1877,8 @@ class TodoApp(QWidget):
         self.config = ConfigStore(CONFIG_FILE)
         self.store: Optional[TaskStore] = None
         self.notified_task_ids: set[str] = set()
+        self.last_notified_task_id: Optional[str] = None
+        self.allow_quit = False
         self.expanded_task_id: Optional[str] = None
         self.details_scroll_positions: dict[str, int] = {}
         self.async_saver = AsyncTaskSaver()
@@ -1919,6 +1921,15 @@ class TodoApp(QWidget):
         tray_icon = QIcon(str(APP_ICON)) if APP_ICON.exists() else QIcon()
         self.tray_icon = QSystemTrayIcon(tray_icon, self)
         self.tray_icon.setToolTip("Faz agora!")
+        self.tray_menu = QMenu(self)
+        open_action = self.tray_menu.addAction("Abrir Faz agora!")
+        self.tray_menu.addSeparator()
+        quit_action = self.tray_menu.addAction("Sair")
+        open_action.triggered.connect(self.show_main_window)
+        quit_action.triggered.connect(self.exit_application)
+        self.tray_icon.setContextMenu(self.tray_menu)
+        self.tray_icon.messageClicked.connect(self.open_last_notification)
+        self.tray_icon.activated.connect(self.on_tray_activated)
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray_icon.show()
         if not self.prepare_store():
@@ -1945,7 +1956,7 @@ class TodoApp(QWidget):
         brand.setSpacing(0)
         app_title = QLabel("Faz agora!")
         app_title.setObjectName("appTitle")
-        app_subtitle = QLabel("Suas tarefas no Debian e no Android")
+        app_subtitle = QLabel("Suas tarefas no Linux e no Android")
         app_subtitle.setObjectName("appSubtitle")
         brand.addWidget(app_title)
         brand.addWidget(app_subtitle)
@@ -2091,9 +2102,9 @@ class TodoApp(QWidget):
         QMessageBox.information(
             self,
             "Configuração WebDAV",
-            "O Faz agora! usa o mesmo arquivo no Debian e no Android. Assim, as tarefas "
+            "O Faz agora! usa o mesmo arquivo no Linux e no Android. Assim, as tarefas "
             "criadas em um dispositivo aparecem no outro.\n\n"
-            "No Debian:\n"
+            "No Linux:\n"
             "1. Conecte sua pasta WebDAV pelo gerenciador de arquivos.\n"
             "2. Clique em Alterar diretório e escolha a pasta WebDAV montada.\n"
             f"3. O arquivo {TASKS_FILENAME} será criado automaticamente no primeiro uso.\n\n"
@@ -2110,9 +2121,9 @@ class TodoApp(QWidget):
             self,
             "Privacidade",
             "Suas tarefas ficam somente no arquivo escolhido por você.\n\n"
-            "O aplicativo Debian não envia telemetria e não armazena sua senha WebDAV. "
-            "A conexão é gerenciada pelo próprio Debian. No Android, a senha fica no "
-            "armazenamento seguro do sistema.",
+            "O Faz agora! para Linux não envia telemetria nem armazena sua senha WebDAV. "
+            "A conexão WebDAV é gerenciada pelo próprio sistema. No Android, a senha "
+            "fica no armazenamento seguro do aparelho.",
         )
 
     def show_about(self) -> None:
@@ -2304,10 +2315,46 @@ class TodoApp(QWidget):
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         self.config.set_geometry(self.size(), self.pos())
-        super().closeEvent(event)
+        if not self.allow_quit and self.tray_icon.isVisible():
+            event.ignore()
+            self.hide()
+            return
+        self.tray_icon.hide()
+        event.accept()
+        if not self.allow_quit:
+            self.allow_quit = True
+            app = QApplication.instance()
+            if app:
+                QTimer.singleShot(0, app.quit)
+
+    def show_main_window(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def exit_application(self) -> None:
+        self.allow_quit = True
+        self.tray_icon.hide()
+        self.close()
         app = QApplication.instance()
         if app:
             app.quit()
+
+    def on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
+            self.show_main_window()
+
+    def open_last_notification(self) -> None:
+        self.show_main_window()
+        task = self.store.get(self.last_notified_task_id) if self.store and self.last_notified_task_id else None
+        if task:
+            self.load_tasks_into_ui(
+                selected_task_id=task.id,
+                switch_to_completed=task.completed,
+            )
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -3070,8 +3117,9 @@ class TodoApp(QWidget):
             self.load_tasks_into_ui()
 
         for task in due_now:
-            title = f"⏰ {task.title}"
-            message = self.human_due_text(task)
+            self.last_notified_task_id = task.id
+            title = "Faz agora!"
+            message = f"⏰ {task.title}\n{self.human_due_text(task)}"
             if self.tray_icon.isVisible() and QSystemTrayIcon.supportsMessages():
                 self.tray_icon.showMessage(
                     title,
@@ -3081,6 +3129,7 @@ class TodoApp(QWidget):
                 )
             else:
                 QMessageBox.information(self, title, message)
+                self.open_last_notification()
 
 def main() -> int:
     app = QApplication(sys.argv)

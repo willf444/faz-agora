@@ -1,6 +1,6 @@
 # Faz agora! (Android)
 
-Versão mobile do gerenciador de tarefas **Faz agora!** baseada no script desktop `willdo.py`. Desenvolvido em **React Native** com **Expo (SDK 51)** e interface em **Material Design 3**.
+Versão mobile do gerenciador de tarefas **Faz agora!** baseada no script desktop `faz-agora.py`. Desenvolvido em **React Native** com **Expo (SDK 51)** e interface em **Material Design 3**.
 
 ---
 
@@ -21,7 +21,7 @@ Versão mobile do gerenciador de tarefas **Faz agora!** baseada no script deskto
   - Notificações agendadas localmente com canal de alta prioridade, som e vibração.
 - **Persistência Local**:
   - Armazenamento offline no dispositivo com `@react-native-async-storage/async-storage`.
-  - Ordenação idêntica ao `willdo.py`: tarefas com vencimento primeiro, tarefas sem data em ordem alfabética e tarefas concluídas ordenadas pela data de conclusão mais recente.
+  - Ordenação idêntica ao `faz-agora.py`: tarefas com vencimento primeiro, tarefas sem data em ordem alfabética e tarefas concluídas ordenadas pela data de conclusão mais recente.
 - **Sincronização WebDAV**:
   - Mesclagem bidirecional do `task.json`, incluindo edições e exclusões feitas no APK ou no desktop.
   - Senha armazenada pelo armazenamento seguro do Android.
@@ -52,33 +52,21 @@ Versão mobile do gerenciador de tarefas **Faz agora!** baseada no script deskto
 
 ## 📦 Como Gerar o Arquivo APK para Instalar no Android
 
-O projeto está configurado com o `eas.json` com perfil `preview` (`buildType: "apk"`), permitindo compilar diretamente na nuvem gratuita do Expo sem precisar configurar Java ou Android Studio no computador.
+O APK é compilado e assinado inteiramente no computador, sem login, envio do projeto ou construção pelo EAS. A chave de assinatura fica somente no armazenamento local e não entra no Git.
 
-### Passo 1: Fazer login no Expo / EAS
-Se ainda não tiver conta (é gratuita), cadastre-se em [expo.dev/signup](https://expo.dev/signup).
-No terminal:
+Execute:
 ```bash
 cd ~/Projetos/Tarefas/willdo-mobile
-npx eas-cli login
+npm run build:apk
 ```
 
-### Passo 2: Configurar o projeto no EAS (apenas na 1ª vez)
-```bash
-npx eas-cli project:init
-```
-
-### Passo 3: Iniciar o Build do APK
-Execute o comando:
-```bash
-npx eas-cli build -p android --profile preview
-```
-*O EAS iniciará o build nos servidores em nuvem do Expo. Ao finalizar, será exibido no terminal um link direto para baixar o arquivo `.apk` pronto para instalar em qualquer celular Android.*
+Ao terminar, o APK assinado será criado na raiz do projeto. Para gerar o pacote destinado a lojas compatíveis com AAB, use `npm run build:aab`.
 
 ---
 
-## ☁️ Conectar o APK ao Faz agora! do Debian
+## ☁️ Conectar o APK ao Faz agora! do Linux
 
-1. No Debian, escolha como diretório de tarefas uma pasta WebDAV montada. O desktop usará o arquivo `task.json` dessa pasta e perceberá alterações externas automaticamente.
+1. No Linux, escolha como diretório de tarefas uma pasta WebDAV montada. O desktop usará o arquivo `task.json` dessa pasta e perceberá alterações externas automaticamente.
 2. No APK, toque na engrenagem do cabeçalho.
 3. Informe a URL da pasta no servidor WebDAV, o usuário e a senha. O aplicativo cria o `task.json` automaticamente na primeira sincronização.
 4. Toque em **Salvar e sincronizar**.
