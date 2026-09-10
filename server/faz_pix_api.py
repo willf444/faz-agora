@@ -1,9 +1,12 @@
 import hashlib
 import hmac
+import json
 import os
 import re
+import threading
 import uuid
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -18,6 +21,9 @@ MP_NOTIFICATION_URL = os.environ.get(
     "https://faz.whats.men/webhook/mercadopago",
 )
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+SUPPORT_GOAL = Decimal("200.00")
+SUPPORT_DATA_FILE = Path(os.environ.get("SUPPORT_DATA_FILE", "/var/lib/faz-pix/support.json"))
+SUPPORT_DATA_LOCK = threading.Lock()
 
 app = FastAPI(title="Faz Pix API", docs_url=None, redoc_url=None)
 
@@ -38,6 +44,56 @@ def payment_status_key(payment_id: str) -> str:
 def ensure_configured() -> None:
     if not MP_ACCESS_TOKEN or not STATUS_SECRET:
         raise HTTPException(status_code=503, detail="Serviço temporariamente indisponível.")
+
+
+def load_support_data() -> dict:
+    try:
+        data = json.loads(SUPPORT_DATA_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and isinstance(data.get("payments"), dict):
+            return data
+    except (OSError, ValueError, TypeError):
+        pass
+    return {"payments": {}}
+
+
+def save_support_data(data: dict) -> None:
+    SUPPORT_DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = SUPPORT_DATA_FILE.with_suffix(".tmp")
+    temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    temporary.replace(SUPPORT_DATA_FILE)
+
+
+def record_approved_payment(payment: dict) -> None:
+    if payment.get("status") != "approved":
+        return
+    if not str(payment.get("external_reference", "")).startswith("faz-support-"):
+        return
+    payment_id = str(payment.get("id", ""))
+    try:
+        amount = Decimal(str(payment.get("transaction_amount", "0"))).quantize(Decimal("0.01"))
+    except InvalidOperation:
+        return
+    if not payment_id.isdigit() or amount <= 0:
+        return
+    with SUPPORT_DATA_LOCK:
+        data = load_support_data()
+        data["payments"][payment_id] = str(amount)
+        save_support_data(data)
+
+
+def support_summary() -> dict:
+    with SUPPORT_DATA_LOCK:
+        data = load_support_data()
+        raised = sum(
+            (Decimal(str(value)) for value in data["payments"].values()),
+            Decimal("0.00"),
+        )
+    return {
+        "raised": float(raised),
+        "goal": float(SUPPORT_GOAL),
+        "supporters": len(data["payments"]),
+    }
 
 
 async def mercado_pago(method: str, path: str, **kwargs) -> dict:
@@ -69,6 +125,11 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/support")
+async def get_support_summary():
+    return support_summary()
+
+
 @app.post("/pix")
 async def create_pix(payload: PixRequest):
     ensure_configured()
@@ -90,7 +151,7 @@ async def create_pix(payload: PixRequest):
         headers={"X-Idempotency-Key": idempotency_key},
         json={
             "transaction_amount": float(amount),
-            "description": "Apoio voluntário ao Faz",
+            "description": "Apoio voluntário ao Faz agora!",
             "payment_method_id": "pix",
             "payer": {"email": email},
             "external_reference": f"faz-support-{idempotency_key}",
@@ -118,11 +179,22 @@ async def get_pix_status(payment_id: str, key: str = Query(min_length=64, max_le
     if not payment_id.isdigit() or not hmac.compare_digest(key, payment_status_key(payment_id)):
         raise HTTPException(status_code=404, detail="Pagamento não encontrado.")
     result = await mercado_pago("GET", f"/v1/payments/{payment_id}")
+    record_approved_payment(result)
     return {"status": result.get("status", "pending")}
 
 
 @app.post("/webhook/mercadopago")
-async def mercado_pago_webhook(_: Request):
-    # A confirmação exibida no app sempre é consultada diretamente na API do
-    # Mercado Pago; uma chamada falsa a este endpoint não aprova pagamentos.
+async def mercado_pago_webhook(request: Request):
+    payment_id = request.query_params.get("data.id") or request.query_params.get("id")
+    if not payment_id:
+        try:
+            payload = await request.json()
+            payment_id = str(payload.get("data", {}).get("id", ""))
+        except (ValueError, TypeError):
+            payment_id = ""
+    if payment_id and str(payment_id).isdigit():
+        # A notificação nunca aprova um pagamento sozinha: a confirmação é
+        # consultada diretamente no Mercado Pago antes de entrar no progresso.
+        result = await mercado_pago("GET", f"/v1/payments/{payment_id}")
+        record_approved_payment(result)
     return {"received": True}

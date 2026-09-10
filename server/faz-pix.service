@@ -16,6 +16,7 @@ PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
+ReadWritePaths=/var/lib/faz-pix
 
 [Install]
 WantedBy=multi-user.target

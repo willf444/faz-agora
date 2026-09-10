@@ -5,6 +5,7 @@ import json
 import sys
 import uuid
 import calendar
+import base64
 import html
 import re
 import threading
@@ -14,8 +15,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Optional
 
-from PyQt6.QtCore import Qt, QDateTime, QTimer, QLocale, QSize, QPoint, QEvent, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QIcon, QTextCharFormat, QTextCursor, QTextDocument, QTextListFormat
+from PyQt6.QtCore import Qt, QDateTime, QTimer, QLocale, QSize, QPoint, QPointF, QRectF, QEvent, QUrl, QByteArray, pyqtSignal
+from PyQt6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QIcon, QPainter, QPen, QPixmap, QTextCharFormat, QTextCursor, QTextDocument, QTextListFormat
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PyQt6.QtWidgets import (
     QApplication,
     QWidget,
@@ -37,6 +39,9 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QTabWidget,
     QSpinBox,
+    QDoubleSpinBox,
+    QProgressBar,
+    QSystemTrayIcon,
     QAbstractItemView,
     QInputDialog,
     QTextBrowser,
@@ -48,6 +53,8 @@ CONFIG_FILE = APP_DIR / "config.json"
 APP_ICON = Path(__file__).resolve().parent / "assets" / "icon.png"
 CHECK_ICON = Path(__file__).resolve().parent / "assets" / "check-white.svg"
 TASKS_FILENAME = "task.json"
+SUPPORT_API_URL = "https://faz.whats.men"
+SUPPORT_GOAL = 200.0
 DATE_FMT = "%d/%m/%Y %H:%M"
 DISPLAY_DATE_FMT = "dd/MM/yyyy HH:mm"
 
@@ -116,6 +123,11 @@ QPushButton#smallButton {
 QPushButton#smallButton:hover {
     background: #303030;
     border-color: #525252;
+}
+QPushButton#smallButton:checked {
+    background: #525252;
+    color: #ffffff;
+    border-color: #a3a3a3;
 }
 QPushButton#smallDangerButton {
     background: #1f1111;
@@ -289,6 +301,16 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
     height: 0;
     background: transparent;
 }
+QProgressBar {
+    height: 12px;
+    background: #252525;
+    border: none;
+    border-radius: 6px;
+}
+QProgressBar::chunk {
+    background: #22c55e;
+    border-radius: 6px;
+}
 """
 
 CHECKBOX_STYLESHEET = f"""
@@ -305,7 +327,6 @@ QCheckBox::indicator:hover {{
 QCheckBox::indicator:checked {{
     background: #22c55e;
     border-color: #22c55e;
-    image: url("{CHECK_ICON.as_posix()}");
 }}
 """
 
@@ -439,10 +460,60 @@ def markdown_to_html(md: str) -> str:
 def inline_md(text: str) -> str:
     s = html.escape(text)
     s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', s)
+    s = re.sub(r"\*\*\*(.+?)\*\*\*", r"<strong><em>\1</em></strong>", s)
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
     s = re.sub(r"\*(.+?)\*", r"<em>\1</em>", s)
     s = re.sub(r"`(.+?)`", r"<code>\1</code>", s)
     return s
+
+def editor_document_to_markdown(document: QTextDocument) -> str:
+    """Serializa os blocos visuais sem juntar linhas independentes."""
+    lines: list[str] = []
+    block = document.begin()
+    while block.isValid():
+        parts: list[str] = []
+        heading_level = block.blockFormat().headingLevel()
+        remaining_text = len(block.text().rstrip())
+        consumed_text = 0
+        iterator = block.begin()
+        while not iterator.atEnd():
+            fragment = iterator.fragment()
+            if fragment.isValid():
+                original_text = fragment.text()
+                usable_length = max(0, min(len(original_text), remaining_text - consumed_text))
+                text = original_text[:usable_length]
+                consumed_text += len(original_text)
+                if not text:
+                    iterator += 1
+                    continue
+                char_format = fragment.charFormat()
+                if char_format.isAnchor() and char_format.anchorHref():
+                    text = f"[{text}]({char_format.anchorHref()})"
+                # O peso do título vem do próprio bloco e não deve virar
+                # também marcadores de negrito no Markdown salvo.
+                bold = (
+                    heading_level == 0
+                    and char_format.fontWeight() >= QFont.Weight.Bold.value
+                )
+                italic = char_format.fontItalic()
+                if bold and italic:
+                    text = f"***{text}***"
+                elif bold:
+                    text = f"**{text}**"
+                elif italic:
+                    text = f"*{text}*"
+                parts.append(text)
+            iterator += 1
+
+        line = "".join(parts)
+        text_list = block.textList()
+        if text_list is not None:
+            line = f"- {line}"
+        elif heading_level in (1, 2, 3):
+            line = f"{'#' * heading_level} {line}"
+        lines.append(line)
+        block = block.next()
+    return "\n".join(lines).rstrip()
 
 @dataclass
 class SubTask:
@@ -776,6 +847,40 @@ class AsyncTaskLoader:
         with self._lock:
             self._running = False
 
+class IconCheckBox(QCheckBox):
+    """Checkbox sem o desenho duplicado do tema gráfico do sistema."""
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.setFixedSize(22, 22)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        box = QRectF(2.5, 2.5, 17, 17)
+        if self.isChecked():
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#22c55e"))
+            painter.drawRoundedRect(box, 4, 4)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(
+                QPen(
+                    QColor("#ffffff"),
+                    2.2,
+                    Qt.PenStyle.SolidLine,
+                    Qt.PenCapStyle.RoundCap,
+                    Qt.PenJoinStyle.RoundJoin,
+                )
+            )
+            painter.drawLine(QPointF(6, 11), QPointF(9, 14))
+            painter.drawLine(QPointF(9, 14), QPointF(16, 7))
+        else:
+            painter.setPen(QPen(QColor("#a3a3a3"), 1.2))
+            painter.setBrush(QColor("#151515"))
+            painter.drawRoundedRect(box, 4, 4)
+
+
 class SubTaskRow(QWidget):
     clicked = pyqtSignal()
     double_clicked = pyqtSignal()
@@ -791,7 +896,7 @@ class SubTaskRow(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 7, 10, 7)
         layout.setSpacing(9)
-        self.checkbox = QCheckBox(self)
+        self.checkbox = IconCheckBox(self)
         self.checkbox.setChecked(checked)
         self.checkbox.toggled.connect(self.update_style)
         self._title = title.strip()
@@ -826,7 +931,9 @@ class SubTaskRow(QWidget):
             f"#subtaskCard {{ background:{background}; border:{border_width}px solid {border}; border-radius:8px; }}"
         )
         font = self.title_label.font()
-        font.setStrikeOut(checked)
+        # O risco é aplicado pelo HTML abaixo. Mantê-lo também na fonte
+        # desenhava duas linhas sobre a subtarefa concluída.
+        font.setStrikeOut(False)
         self.title_label.setFont(font)
         color = "#737373" if checked else "#e5e5e5"
         self.title_label.setStyleSheet(f"color:{color};background:transparent;border:none;")
@@ -844,7 +951,9 @@ class SubTaskRow(QWidget):
             if event.type() == QEvent.Type.MouseButtonPress:
                 self.clicked.emit()
             elif event.type() == QEvent.Type.MouseButtonDblClick:
+                event.accept()
                 self.double_clicked.emit()
+                return True
             elif event.type() == QEvent.Type.Wheel:
                 self.wheel_requested.emit(event.angleDelta().y())
                 return True
@@ -855,12 +964,264 @@ class SubTaskRow(QWidget):
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
+        event.accept()
         self.double_clicked.emit()
-        super().mouseDoubleClickEvent(event)
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
         self.wheel_requested.emit(event.angleDelta().y())
         event.accept()
+
+class DetailsEditorDialog(QDialog):
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        initial_text: str = "",
+        editing_subtask: bool = False,
+    ):
+        super().__init__(parent)
+        self.editing_subtask = editing_subtask
+        self.action: Optional[str] = None
+        self.content = ""
+        self.initial_text = initial_text.rstrip()
+        self.setWindowTitle(
+            "Editar subtarefa" if editing_subtask else "Detalhes da Tarefa"
+        )
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMinMaxButtonsHint)
+        self.setMinimumSize(720, 520)
+
+        layout = QVBoxLayout(self)
+
+        toolbar = QHBoxLayout()
+        self.bold_button = QPushButton("N")
+        self.bold_button.setObjectName("smallButton")
+        self.bold_button.setStyleSheet("font-weight:700;")
+        self.bold_button.clicked.connect(self.toggle_bold)
+        self.italic_button = QPushButton("I")
+        self.italic_button.setObjectName("smallButton")
+        self.italic_button.clicked.connect(self.toggle_italic)
+        self.list_button = QPushButton("Lista")
+        self.list_button.setObjectName("smallButton")
+        self.list_button.clicked.connect(self.toggle_list)
+        self.h1_button = QPushButton("H1")
+        self.h1_button.setObjectName("smallButton")
+        self.h1_button.clicked.connect(lambda: self.apply_heading(1))
+        self.h2_button = QPushButton("H2")
+        self.h2_button.setObjectName("smallButton")
+        self.h2_button.clicked.connect(lambda: self.apply_heading(2))
+        self.link_button = QPushButton("Link")
+        self.link_button.setObjectName("smallButton")
+        self.link_button.clicked.connect(self.apply_link)
+        for button in (
+            self.bold_button,
+            self.italic_button,
+            self.list_button,
+            self.h1_button,
+            self.h2_button,
+            self.link_button,
+        ):
+            button.setCheckable(True)
+            toolbar.addWidget(button)
+        toolbar.addStretch()
+        layout.addLayout(toolbar)
+
+        self.details_edit = QTextEdit(self)
+        self.details_edit.setPlaceholderText(
+            "Escreva a descrição geral ou o conteúdo de uma subtarefa..."
+        )
+        self.details_edit.setAcceptRichText(True)
+        self.details_edit.setHtml(markdown_to_html(self.initial_text))
+        self.initial_markdown = editor_document_to_markdown(self.details_edit.document())
+        self.details_edit.cursorPositionChanged.connect(self.update_format_buttons)
+        self.details_edit.selectionChanged.connect(self.update_format_buttons)
+        layout.addWidget(self.details_edit, stretch=1)
+
+        actions = QHBoxLayout()
+        actions.addStretch()
+        if editing_subtask:
+            save_subtask = QPushButton("Salvar alterações da subtarefa")
+            save_subtask.clicked.connect(lambda: self.submit("subtask_edit"))
+            actions.addWidget(save_subtask)
+        else:
+            save_description = QPushButton("Salvar como descrição")
+            save_description.setObjectName("secondaryButton")
+            save_description.clicked.connect(lambda: self.submit("description"))
+            add_subtask = QPushButton("+ Adicionar como subtarefa")
+            add_subtask.clicked.connect(lambda: self.submit("subtask"))
+            actions.addWidget(save_description)
+            actions.addWidget(add_subtask)
+        layout.addLayout(actions)
+        self.setStyleSheet(BASE_STYLESHEET + CHECKBOX_STYLESHEET)
+        self.update_format_buttons()
+
+    def editor_markdown(self) -> str:
+        return editor_document_to_markdown(self.details_edit.document())
+
+    def update_format_buttons(self) -> None:
+        cursor = self.details_edit.textCursor()
+        char_format = cursor.charFormat()
+        block_format = cursor.blockFormat()
+        states = (
+            (self.bold_button, char_format.fontWeight() >= QFont.Weight.Bold.value),
+            (self.italic_button, char_format.fontItalic()),
+            (self.list_button, cursor.currentList() is not None),
+            (self.h1_button, block_format.headingLevel() == 1),
+            (self.h2_button, block_format.headingLevel() == 2),
+            (self.link_button, char_format.isAnchor()),
+        )
+        for button, checked in states:
+            button.blockSignals(True)
+            button.setChecked(checked)
+            button.blockSignals(False)
+
+    def toggle_bold(self) -> None:
+        cursor = self.details_edit.textCursor()
+        char_format = QTextCharFormat()
+        char_format.setFontWeight(
+            QFont.Weight.Normal.value
+            if cursor.charFormat().fontWeight() >= QFont.Weight.Bold.value
+            else QFont.Weight.Bold.value
+        )
+        cursor.mergeCharFormat(char_format)
+        self.details_edit.mergeCurrentCharFormat(char_format)
+        self.details_edit.setFocus()
+        self.update_format_buttons()
+
+    def toggle_italic(self) -> None:
+        cursor = self.details_edit.textCursor()
+        char_format = QTextCharFormat()
+        char_format.setFontItalic(not cursor.charFormat().fontItalic())
+        cursor.mergeCharFormat(char_format)
+        self.details_edit.mergeCurrentCharFormat(char_format)
+        self.details_edit.setFocus()
+        self.update_format_buttons()
+
+    def toggle_list(self) -> None:
+        cursor = self.details_edit.textCursor()
+        if cursor.currentList():
+            block_format = cursor.blockFormat()
+            block_format.setObjectIndex(-1)
+            block_format.setIndent(0)
+            cursor.setBlockFormat(block_format)
+        else:
+            list_format = QTextListFormat()
+            list_format.setStyle(QTextListFormat.Style.ListDisc)
+            cursor.createList(list_format)
+        self.details_edit.setFocus()
+        self.update_format_buttons()
+
+    def apply_heading(self, level: int) -> None:
+        cursor = self.details_edit.textCursor()
+        start = cursor.selectionStart()
+        end = max(start, cursor.selectionEnd() - 1)
+        block = self.details_edit.document().findBlock(start)
+        blocks = []
+        while block.isValid() and block.position() <= end:
+            blocks.append(block)
+            block = block.next()
+        target_level = 0 if blocks and all(
+            current.blockFormat().headingLevel() == level for current in blocks
+        ) else level
+        cursor.beginEditBlock()
+        for current in blocks:
+            block_cursor = QTextCursor(current)
+            block_format = block_cursor.blockFormat()
+            block_format.setHeadingLevel(target_level)
+            block_cursor.setBlockFormat(block_format)
+            block_cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+            block_cursor.movePosition(
+                QTextCursor.MoveOperation.EndOfBlock,
+                QTextCursor.MoveMode.KeepAnchor,
+            )
+            heading_format = QTextCharFormat()
+            heading_format.setFontWeight(
+                QFont.Weight.Bold.value if target_level else QFont.Weight.Normal.value
+            )
+            heading_format.setFontPointSize(
+                20 if target_level == 1 else 17 if target_level == 2 else self.details_edit.font().pointSizeF()
+            )
+            block_cursor.mergeCharFormat(heading_format)
+        cursor.endEditBlock()
+        restored = self.details_edit.textCursor()
+        maximum = max(0, self.details_edit.document().characterCount() - 1)
+        restored.setPosition(min(start, maximum))
+        if cursor.selectionEnd() > cursor.selectionStart():
+            restored.setPosition(
+                min(cursor.selectionEnd(), maximum),
+                QTextCursor.MoveMode.KeepAnchor,
+            )
+        self.details_edit.setTextCursor(restored)
+        self.details_edit.setFocus()
+        self.update_format_buttons()
+
+    def apply_link(self) -> None:
+        cursor = self.details_edit.textCursor()
+        if cursor.charFormat().isAnchor():
+            if not cursor.hasSelection():
+                cursor.select(QTextCursor.SelectionType.WordUnderCursor)
+            char_format = QTextCharFormat()
+            char_format.setAnchor(False)
+            char_format.setAnchorHref("")
+            char_format.setFontUnderline(False)
+            char_format.setForeground(QColor("#f5f5f5"))
+            cursor.mergeCharFormat(char_format)
+            self.details_edit.setFocus()
+            self.update_format_buttons()
+            return
+        if not cursor.hasSelection():
+            QMessageBox.information(self, "Link", "Selecione o texto que receberá o link.")
+            return
+        url, accepted = QInputDialog.getText(
+            self, "Adicionar link", "Endereço:", text="https://"
+        )
+        if not accepted or not url.strip():
+            return
+        char_format = QTextCharFormat()
+        char_format.setAnchor(True)
+        char_format.setAnchorHref(url.strip())
+        char_format.setForeground(QColor("#86efac"))
+        char_format.setFontUnderline(True)
+        cursor.mergeCharFormat(char_format)
+        self.details_edit.setFocus()
+        self.update_format_buttons()
+
+    def submit(self, action: str) -> None:
+        content = self.editor_markdown()
+        if action in {"subtask", "subtask_edit"} and not content.strip():
+            QMessageBox.warning(self, "Aviso", "Escreva o conteúdo da subtarefa.")
+            return
+        self.action = action
+        self.content = content
+        self.accept()
+
+    def reject(self) -> None:
+        if self.editor_markdown() != self.initial_markdown:
+            answer = QMessageBox.question(
+                self,
+                "Descartar detalhes da tarefa?",
+                "Descartar detalhes da tarefa?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        super().reject()
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        if self.action is not None or self.editor_markdown() == self.initial_markdown:
+            event.accept()
+            return
+        answer = QMessageBox.question(
+            self,
+            "Descartar detalhes da tarefa?",
+            "Descartar detalhes da tarefa?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            event.accept()
+        else:
+            event.ignore()
+
 
 class TaskEditorDialog(QDialog):
     def __init__(
@@ -876,11 +1237,6 @@ class TaskEditorDialog(QDialog):
         self.setMinimumSize(860, 660)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMinMaxButtonsHint)
         self.description_md = task.details_md if task else ""
-        self.editing_subtask_item: Optional[QListWidgetItem] = None
-        self.editor_draft = ""
-        self.editor_draft_was_consumed = False
-        self.editor_was_consumed = False
-        self.updating_editor = False
         self.last_subtasks_width = -1
 
         layout = QVBoxLayout(self)
@@ -919,65 +1275,27 @@ class TaskEditorDialog(QDialog):
         layout.addLayout(recurrence_row)
         layout.addWidget(self.save_task_button)
 
-        toolbar = QHBoxLayout()
-        self.bold_button = QPushButton("N")
-        self.bold_button.setObjectName("smallButton")
-        self.bold_button.setStyleSheet("font-weight:700;")
-        self.bold_button.clicked.connect(self.toggle_bold)
-        self.italic_button = QPushButton("I")
-        self.italic_button.setObjectName("smallButton")
-        self.italic_button.setStyleSheet("font-style:italic;font-weight:600;")
-        self.italic_button.clicked.connect(self.toggle_italic)
-        self.list_button = QPushButton("Lista")
-        self.list_button.setObjectName("smallButton")
-        self.list_button.clicked.connect(self.toggle_list)
-        self.h1_button = QPushButton("H1")
-        self.h1_button.setObjectName("smallButton")
-        self.h1_button.clicked.connect(lambda: self.apply_heading(1))
-        self.h2_button = QPushButton("H2")
-        self.h2_button.setObjectName("smallButton")
-        self.h2_button.clicked.connect(lambda: self.apply_heading(2))
-        self.link_button = QPushButton("Link")
-        self.link_button.setObjectName("smallButton")
-        self.link_button.clicked.connect(self.apply_link)
-        for b in (
-            self.bold_button,
-            self.italic_button,
-            self.list_button,
-            self.h1_button,
-            self.h2_button,
-            self.link_button,
-        ):
-            toolbar.addWidget(b)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
+        details_header = QHBoxLayout()
+        details_label = QLabel("Detalhes da tarefa")
+        details_label.setObjectName("sectionLabel")
+        self.details_button = QPushButton("Editar detalhes")
+        self.details_button.setObjectName("secondaryButton")
+        self.details_button.clicked.connect(self.open_details_editor)
+        details_header.addWidget(details_label)
+        details_header.addStretch()
+        details_header.addWidget(self.details_button)
+        layout.addLayout(details_header)
 
-        self.details_edit = QTextEdit(self)
-        self.details_edit.setPlaceholderText(
-            "Escreva a descrição geral ou o conteúdo de uma subtarefa..."
-        )
-        self.details_edit.setAcceptRichText(True)
-        self.details_edit.setMinimumHeight(230)
-        self.details_edit.textChanged.connect(self.on_editor_text_changed)
-        layout.addWidget(self.details_edit, stretch=2)
-
-        editor_actions = QHBoxLayout()
-        self.save_description_button = QPushButton("Salvar como descrição")
-        self.save_description_button.setObjectName("secondaryButton")
-        self.save_description_button.clicked.connect(self.save_editor_content)
-        self.add_subtask_button = QPushButton("+ Adicionar como subtarefa")
-        self.add_subtask_button.clicked.connect(self.add_subtask_from_editor)
-        self.cancel_subtask_edit_button = QPushButton("Cancelar edição")
-        self.cancel_subtask_edit_button.setObjectName("ghostButton")
-        self.cancel_subtask_edit_button.clicked.connect(self.cancel_subtask_edit)
-        self.cancel_subtask_edit_button.hide()
-        self.editor_status = QLabel("Escolha uma ação para salvar o conteúdo.")
+        self.details_preview = QTextBrowser(self)
+        self.details_preview.setOpenExternalLinks(True)
+        self.details_preview.setReadOnly(True)
+        self.details_preview.setMinimumHeight(120)
+        self.details_preview.setMaximumHeight(210)
+        layout.addWidget(self.details_preview)
+        self.editor_status = QLabel("")
         self.editor_status.setObjectName("mutedLabel")
-        editor_actions.addWidget(self.save_description_button)
-        editor_actions.addWidget(self.add_subtask_button)
-        editor_actions.addWidget(self.cancel_subtask_edit_button)
-        editor_actions.addWidget(self.editor_status, stretch=1)
-        layout.addLayout(editor_actions)
+        self.editor_status.hide()
+        layout.addWidget(self.editor_status)
 
         subtasks_header = QHBoxLayout()
         subtasks_label = QLabel("Subtarefas")
@@ -1021,7 +1339,6 @@ class TaskEditorDialog(QDialog):
                     self.custom_unit.setCurrentIndex(unit_index)
             else:
                 self.recurrence_box.setCurrentText(task.recurrence)
-            self.set_editor_text(task.details_md)
             for subtask in task.subtasks:
                 self.add_subtask_item(subtask.title, subtask.completed, subtask.id)
         else:
@@ -1030,22 +1347,32 @@ class TaskEditorDialog(QDialog):
         self.update_due_enabled()
         self.update_custom_recurrence_visibility()
         self.update_subtask_actions()
+        self.refresh_details_preview()
         self.setStyleSheet(BASE_STYLESHEET + CHECKBOX_STYLESHEET)
 
     def restore_parent_window(self) -> None:
         parent = self.parentWidget()
-        if parent:
+        if not parent:
+            return
+
+        def restore() -> None:
+            parent.setWindowState(
+                parent.windowState() & ~Qt.WindowState.WindowMinimized
+            )
             parent.show()
             parent.raise_()
             parent.activateWindow()
 
+        QTimer.singleShot(0, restore)
+
     def reject(self) -> None:
-        self.restore_parent_window()
         super().reject()
+        self.restore_parent_window()
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
-        self.restore_parent_window()
         super().closeEvent(event)
+        if event.isAccepted():
+            self.restore_parent_window()
 
     def update_due_enabled(self) -> None:
         enabled = self.use_date_checkbox.isChecked()
@@ -1061,157 +1388,39 @@ class TaskEditorDialog(QDialog):
         self.custom_interval.setVisible(visible)
         self.custom_unit.setVisible(visible)
 
-    def current_cursor_text(self) -> str:
-        cursor = self.details_edit.textCursor()
-        return cursor.selectedText()
-
-    def toggle_bold(self) -> None:
-        cursor = self.details_edit.textCursor()
-        current_weight = cursor.charFormat().fontWeight()
-        char_format = QTextCharFormat()
-        char_format.setFontWeight(
-            QFont.Weight.Normal.value
-            if current_weight >= QFont.Weight.Bold.value
-            else QFont.Weight.Bold.value
-        )
-        cursor.mergeCharFormat(char_format)
-        self.details_edit.mergeCurrentCharFormat(char_format)
-        self.details_edit.setFocus()
-
-    def toggle_italic(self) -> None:
-        cursor = self.details_edit.textCursor()
-        char_format = QTextCharFormat()
-        char_format.setFontItalic(not cursor.charFormat().fontItalic())
-        cursor.mergeCharFormat(char_format)
-        self.details_edit.mergeCurrentCharFormat(char_format)
-        self.details_edit.setFocus()
-
-    def toggle_list(self) -> None:
-        cursor = self.details_edit.textCursor()
-        current_list = cursor.currentList()
-        if current_list:
-            block_format = cursor.blockFormat()
-            block_format.setObjectIndex(-1)
-            block_format.setIndent(0)
-            cursor.setBlockFormat(block_format)
+    def refresh_details_preview(self) -> None:
+        if self.description_md.strip():
+            self.details_preview.setHtml(markdown_to_html(self.description_md))
         else:
-            list_format = QTextListFormat()
-            list_format.setStyle(QTextListFormat.Style.ListDisc)
-            cursor.createList(list_format)
-        self.details_edit.setFocus()
-
-    def apply_heading(self, level: int) -> None:
-        original_cursor = self.details_edit.textCursor()
-        selection_start = original_cursor.selectionStart()
-        selection_end = original_cursor.selectionEnd()
-        document = self.details_edit.document()
-        block = document.findBlock(selection_start)
-        last_position = max(selection_start, selection_end - 1)
-
-        original_cursor.beginEditBlock()
-        while block.isValid() and block.position() <= last_position:
-            block_cursor = QTextCursor(block)
-            block_format = block_cursor.blockFormat()
-            block_format.setHeadingLevel(level)
-            block_cursor.setBlockFormat(block_format)
-
-            block_cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
-            block_cursor.movePosition(
-                QTextCursor.MoveOperation.EndOfBlock,
-                QTextCursor.MoveMode.KeepAnchor,
+            self.details_preview.setHtml(
+                '<html><body style="color:#737373;background:#151515;">'
+                "Sem descrição.</body></html>"
             )
-            char_format = QTextCharFormat()
-            char_format.setFontWeight(QFont.Weight.Bold.value)
-            char_format.setFontPointSize(22 if level == 1 else 18)
-            block_cursor.mergeCharFormat(char_format)
-            block = block.next()
-        original_cursor.endEditBlock()
-
-        # Recarrega o Markdown gerado para remover tamanhos herdados de textos
-        # antigos e aplicar visualmente o nível escolhido de forma consistente.
-        normalized_markdown = document.toMarkdown().rstrip()
-        self.updating_editor = True
-        document.setMarkdown(normalized_markdown)
-        self.updating_editor = False
-        restored_cursor = self.details_edit.textCursor()
-        max_position = max(0, document.characterCount() - 1)
-        restored_cursor.setPosition(min(selection_start, max_position))
-        if selection_end > selection_start:
-            restored_cursor.setPosition(
-                min(selection_end, max_position),
-                QTextCursor.MoveMode.KeepAnchor,
-            )
-        self.details_edit.setTextCursor(restored_cursor)
-        self.details_edit.setFocus()
-
-    def apply_link(self) -> None:
-        cursor = self.details_edit.textCursor()
-        if not cursor.hasSelection():
-            QMessageBox.information(self, "Link", "Selecione o texto que receberá o link.")
-            return
-        url, accepted = QInputDialog.getText(
-            self,
-            "Adicionar link",
-            "Endereço:",
-            text="https://",
-        )
-        if not accepted or not url.strip():
-            return
-        char_format = QTextCharFormat()
-        char_format.setAnchor(True)
-        char_format.setAnchorHref(url.strip())
-        char_format.setForeground(QColor("#86efac"))
-        char_format.setFontUnderline(True)
-        cursor.mergeCharFormat(char_format)
-        self.details_edit.setFocus()
-
-    def editor_markdown(self) -> str:
-        return self.details_edit.document().toMarkdown().rstrip()
-
-    def set_editor_text(self, text: str) -> None:
-        self.updating_editor = True
-        self.details_edit.document().setMarkdown(text)
-        self.updating_editor = False
-
-    def on_editor_text_changed(self) -> None:
-        if not self.updating_editor:
-            self.editor_was_consumed = False
-
-    def save_editor_content(self) -> None:
-        content = self.editor_markdown()
-        if self.editing_subtask_item is not None:
-            row = self.subtasks_list.itemWidget(self.editing_subtask_item)
-            if row and content.strip():
-                row.set_title(content)
-                self.update_subtask_item_height(self.editing_subtask_item)
-                if self.persist_changes("✓ Subtarefa atualizada e tarefa salva."):
-                    self.finish_subtask_edit("✓ Subtarefa atualizada e tarefa salva.")
-            elif not content.strip():
-                QMessageBox.warning(self, "Aviso", "Escreva o conteúdo da subtarefa.")
-            return
-
-        self.description_md = content
-        self.editor_was_consumed = False
-        self.persist_changes("✓ Descrição geral e tarefa salvas.")
 
     def save_task_and_close(self) -> None:
-        if not self.editor_was_consumed:
-            self.description_md = self.editor_markdown()
         if self.persist_changes("✓ Tarefa salva."):
             self.accept()
 
-    def add_subtask_from_editor(self) -> None:
-        content = self.editor_markdown().strip()
-        if not content:
-            QMessageBox.warning(self, "Aviso", "Escreva o conteúdo da subtarefa.")
+    def open_details_editor(self) -> None:
+        if not self.title_input.text().strip():
+            QMessageBox.warning(self, "Aviso", "Digite o nome da tarefa.")
             return
-        self.add_subtask_item(content, False)
-        if not self.persist_changes("✓ Subtarefa adicionada e tarefa salva."):
-            self.subtasks_list.takeItem(self.subtasks_list.count() - 1)
-            return
-        self.set_editor_text("")
-        self.editor_was_consumed = True
-        self.details_edit.setFocus()
+        dialog = DetailsEditorDialog(self, self.description_md)
+        dialog.setWindowState(dialog.windowState() | Qt.WindowState.WindowMaximized)
+        dialog.exec()
+        if dialog.action == "description":
+            previous = self.description_md
+            self.description_md = dialog.content
+            if not self.persist_changes("✓ Descrição geral e tarefa salvas."):
+                self.description_md = previous
+            self.refresh_details_preview()
+        elif dialog.action == "subtask":
+            self.add_subtask_item(dialog.content, False)
+            if not self.persist_changes("✓ Subtarefa adicionada e tarefa salva."):
+                self.subtasks_list.takeItem(self.subtasks_list.count() - 1)
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     def persist_changes(self, success_message: str) -> bool:
         if not self.title_input.text().strip():
@@ -1225,21 +1434,8 @@ class TaskEditorDialog(QDialog):
         self.task = saved_task
         self.setWindowTitle("Editar tarefa")
         self.editor_status.setText(success_message)
+        self.editor_status.show()
         return True
-
-    def finish_subtask_edit(self, status: str) -> None:
-        self.editing_subtask_item = None
-        self.save_task_button.setEnabled(True)
-        self.save_description_button.setText("Salvar como descrição")
-        self.add_subtask_button.show()
-        self.cancel_subtask_edit_button.hide()
-        self.set_editor_text(self.editor_draft)
-        self.editor_was_consumed = self.editor_draft_was_consumed
-        self.editor_status.setText(status)
-
-    def cancel_subtask_edit(self) -> None:
-        if self.editing_subtask_item is not None:
-            self.finish_subtask_edit("Edição da subtarefa cancelada.")
 
     def subtask_item_height(self, title: str) -> int:
         available_width = max(280, self.subtasks_list.viewport().width() - 80)
@@ -1271,11 +1467,6 @@ class TaskEditorDialog(QDialog):
             current_row = self.subtasks_list.itemWidget(current)
             if current_row:
                 current_row.set_selected(True)
-        if self.editing_subtask_item is not None and current is not self.editing_subtask_item:
-            if current is None:
-                self.cancel_subtask_edit()
-            else:
-                self.load_subtask_in_editor(current, switched=True)
         self.update_subtask_actions()
 
     def update_subtask_actions(self) -> None:
@@ -1284,8 +1475,6 @@ class TaskEditorDialog(QDialog):
         self.remove_subtask_button.setEnabled(has_selection)
 
     def clear_subtask_selection(self) -> None:
-        if self.editing_subtask_item is not None:
-            self.cancel_subtask_edit()
         self.subtasks_list.clearSelection()
         self.subtasks_list.setCurrentItem(None)
         self.update_subtask_actions()
@@ -1330,8 +1519,6 @@ class TaskEditorDialog(QDialog):
         if not self.title_input.text().strip():
             QMessageBox.warning(self, "Aviso", "Digite o nome da tarefa.")
             return
-        if self.subtasks_list.currentItem() is self.editing_subtask_item:
-            self.cancel_subtask_edit()
         row = self.subtasks_list.currentRow()
         if row >= 0:
             self.subtasks_list.takeItem(row)
@@ -1343,25 +1530,19 @@ class TaskEditorDialog(QDialog):
         row = self.subtasks_list.itemWidget(item) if item else None
         if not row:
             return
-        if self.editing_subtask_item is None:
-            self.editor_draft = self.editor_markdown()
-            self.editor_draft_was_consumed = self.editor_was_consumed
-        self.load_subtask_in_editor(item)
-
-    def load_subtask_in_editor(self, item: QListWidgetItem, switched: bool = False) -> None:
-        row = self.subtasks_list.itemWidget(item)
-        if not row:
-            return
-        self.editing_subtask_item = item
-        self.save_task_button.setEnabled(False)
-        self.save_description_button.setText("Salvar alterações da subtarefa")
-        self.add_subtask_button.hide()
-        self.cancel_subtask_edit_button.show()
-        label = clean_details_text(row.title())[:55]
-        prefix = "Edição anterior descartada. Editando" if switched else "Editando"
-        self.editor_status.setText(f"{prefix}: {label}")
-        self.set_editor_text(row.title())
-        self.details_edit.setFocus()
+        dialog = DetailsEditorDialog(self, row.title(), editing_subtask=True)
+        dialog.setWindowState(dialog.windowState() | Qt.WindowState.WindowMaximized)
+        dialog.exec()
+        if dialog.action == "subtask_edit":
+            previous = row.title()
+            row.set_title(dialog.content)
+            self.update_subtask_item_height(item)
+            if not self.persist_changes("✓ Subtarefa atualizada e tarefa salva."):
+                row.set_title(previous)
+                self.update_subtask_item_height(item)
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     def get_data(self) -> dict:
         subtasks = []
@@ -1406,6 +1587,270 @@ class TaskEditorDialog(QDialog):
         for index in range(self.subtasks_list.count()):
             self.update_subtask_item_height(self.subtasks_list.item(index))
 
+
+class SupportDialog(QDialog):
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Sobre o Faz agora!")
+        self.setMinimumSize(620, 650)
+        self.resize(680, 700)
+        self.network = QNetworkAccessManager(self)
+        self.payment_id = ""
+        self.status_key = ""
+        self.selected_amount: Optional[float] = None
+        self.poll_timer = QTimer(self)
+        self.poll_timer.setInterval(6000)
+        self.poll_timer.timeout.connect(self.check_payment)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 22, 24, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Faz agora!")
+        title.setObjectName("appTitle")
+        subtitle = QLabel("Um projeto independente de Willian Ferreira")
+        subtitle.setObjectName("appSubtitle")
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+
+        description = QLabel(
+            "O Faz agora! para Debian é gratuito, sem anúncios, rastreamento ou venda de dados. "
+            "Suas tarefas ficam neste computador ou no servidor WebDAV escolhido por você."
+        )
+        description.setWordWrap(True)
+        description.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(description)
+
+        android_text = QLabel(
+            "A versão para Android está pronta e sincroniza com o mesmo arquivo. Para publicá-la "
+            "na Play Store, é necessário pagar a taxa de $25, que pode chegar perto de R$ 200 "
+            "após conversão, IOF e demais cobranças."
+        )
+        android_text.setWordWrap(True)
+        android_text.setObjectName("mutedLabel")
+        android_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(android_text)
+
+        invitation = QLabel(
+            "Se este aplicativo é útil para você, considere apoiar esta primeira publicação."
+        )
+        invitation.setWordWrap(True)
+        layout.addWidget(invitation)
+
+        self.progress_label = QLabel("Meta inicial: carregando...")
+        self.progress_label.setObjectName("sectionLabel")
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setRange(0, int(SUPPORT_GOAL * 100))
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        layout.addWidget(self.progress_label)
+        layout.addWidget(self.progress_bar)
+
+        amount_row = QHBoxLayout()
+        amount_row.setSpacing(8)
+        self.amount_buttons: dict[float | str, QPushButton] = {}
+        for value, label in ((10.0, "R$ 10"), (50.0, "R$ 50"), ("free", "Livre")):
+            button = QPushButton(label)
+            button.setObjectName("smallButton")
+            button.setCheckable(True)
+            button.clicked.connect(lambda _checked=False, amount=value: self.select_amount(amount))
+            self.amount_buttons[value] = button
+            amount_row.addWidget(button, 1)
+        layout.addLayout(amount_row)
+
+        self.custom_amount = QDoubleSpinBox(self)
+        self.custom_amount.setLocale(QLocale("pt_BR"))
+        self.custom_amount.setRange(1.0, 1000.0)
+        self.custom_amount.setDecimals(2)
+        self.custom_amount.setPrefix("R$ ")
+        self.custom_amount.setValue(10.0)
+        self.custom_amount.valueChanged.connect(self.update_generate_button)
+        self.custom_amount.hide()
+        layout.addWidget(self.custom_amount)
+
+        self.email_input = QLineEdit(self)
+        self.email_input.setPlaceholderText("Seu e-mail")
+        self.email_input.textChanged.connect(self.update_generate_button)
+        layout.addWidget(self.email_input)
+
+        email_hint = QLabel("O Mercado Pago exige um e-mail para gerar o Pix.")
+        email_hint.setObjectName("mutedLabel")
+        layout.addWidget(email_hint)
+
+        self.generate_button = QPushButton("Gerar Pix")
+        self.generate_button.setEnabled(False)
+        self.generate_button.clicked.connect(self.create_pix)
+        layout.addWidget(self.generate_button)
+
+        self.payment_box = QWidget(self)
+        payment_layout = QVBoxLayout(self.payment_box)
+        payment_layout.setContentsMargins(0, 4, 0, 0)
+        self.qr_label = QLabel(self.payment_box)
+        self.qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.qr_label.hide()
+        self.payment_status = QLabel("")
+        self.payment_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.payment_status.setWordWrap(True)
+        self.pix_code = QTextEdit(self.payment_box)
+        self.pix_code.setReadOnly(True)
+        self.pix_code.setMaximumHeight(76)
+        self.copy_button = QPushButton("Copiar código Pix")
+        self.copy_button.setObjectName("secondaryButton")
+        self.copy_button.clicked.connect(self.copy_pix)
+        payment_layout.addWidget(self.qr_label)
+        payment_layout.addWidget(self.payment_status)
+        payment_layout.addWidget(self.pix_code)
+        payment_layout.addWidget(self.copy_button)
+        self.payment_box.hide()
+        layout.addWidget(self.payment_box)
+        layout.addStretch()
+
+        self.setStyleSheet(BASE_STYLESHEET + CHECKBOX_STYLESHEET)
+        self.load_progress()
+
+    @staticmethod
+    def brl(value: float) -> str:
+        return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    @staticmethod
+    def valid_email(value: str) -> bool:
+        return bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value.strip()))
+
+    def select_amount(self, value: float | str) -> None:
+        self.selected_amount = None if value == "free" else float(value)
+        for key, button in self.amount_buttons.items():
+            button.setChecked(key == value)
+        self.custom_amount.setVisible(value == "free")
+        self.payment_box.hide()
+        self.poll_timer.stop()
+        self.update_generate_button()
+
+    def current_amount(self) -> Optional[float]:
+        if self.amount_buttons["free"].isChecked():
+            return self.custom_amount.value()
+        return self.selected_amount
+
+    def update_generate_button(self) -> None:
+        amount = self.current_amount()
+        self.generate_button.setEnabled(
+            amount is not None
+            and 1.0 <= amount <= 1000.0
+            and self.valid_email(self.email_input.text())
+        )
+
+    def request(self, path: str, finished: Callable, payload: Optional[dict] = None) -> None:
+        request = QNetworkRequest(QUrl(f"{SUPPORT_API_URL}{path}"))
+        request.setHeader(QNetworkRequest.KnownHeaders.ContentTypeHeader, "application/json")
+        if payload is None:
+            reply = self.network.get(request)
+        else:
+            reply = self.network.post(
+                request,
+                QByteArray(json.dumps(payload).encode("utf-8")),
+            )
+        reply.finished.connect(lambda current=reply: finished(current))
+
+    @staticmethod
+    def reply_data(reply: QNetworkReply) -> tuple[Optional[dict], str]:
+        raw = bytes(reply.readAll()).decode("utf-8", errors="replace")
+        try:
+            data = json.loads(raw) if raw else {}
+        except ValueError:
+            data = {}
+        error = ""
+        if reply.error() != QNetworkReply.NetworkError.NoError:
+            error = data.get("detail", "Não foi possível conectar ao serviço de apoio.")
+        reply.deleteLater()
+        return data if isinstance(data, dict) else None, error
+
+    def load_progress(self) -> None:
+        self.request("/support", self.on_progress_loaded)
+
+    def on_progress_loaded(self, reply: QNetworkReply) -> None:
+        data, error = self.reply_data(reply)
+        if error or not data:
+            self.progress_label.setText("Meta inicial: R$ 200,00")
+            return
+        raised = max(0.0, float(data.get("raised", 0)))
+        goal = max(1.0, float(data.get("goal", SUPPORT_GOAL)))
+        self.progress_bar.setRange(0, int(goal * 100))
+        self.progress_bar.setValue(min(int(raised * 100), int(goal * 100)))
+        self.progress_label.setText(f"{self.brl(raised)} de {self.brl(goal)}")
+
+    def create_pix(self) -> None:
+        amount = self.current_amount()
+        if amount is None or not self.valid_email(self.email_input.text()):
+            return
+        self.generate_button.setEnabled(False)
+        self.generate_button.setText("Gerando Pix...")
+        self.request(
+            "/pix",
+            self.on_pix_created,
+            {"amount": amount, "email": self.email_input.text().strip()},
+        )
+
+    def on_pix_created(self, reply: QNetworkReply) -> None:
+        data, error = self.reply_data(reply)
+        self.generate_button.setText("Gerar Pix")
+        self.update_generate_button()
+        if error or not data:
+            self.payment_box.show()
+            self.qr_label.hide()
+            self.pix_code.hide()
+            self.copy_button.hide()
+            self.payment_status.setText(error or "Não foi possível gerar o Pix.")
+            return
+        self.payment_id = str(data.get("id", ""))
+        self.status_key = str(data.get("statusKey", ""))
+        self.pix_code.setPlainText(str(data.get("qrCode", "")))
+        self.pix_code.show()
+        self.copy_button.show()
+        qr_base64 = str(data.get("qrCodeBase64", ""))
+        pixmap = QPixmap()
+        try:
+            loaded = pixmap.loadFromData(base64.b64decode(qr_base64)) if qr_base64 else False
+        except (ValueError, TypeError):
+            loaded = False
+        if loaded:
+            self.qr_label.setPixmap(
+                pixmap.scaled(190, 190, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            )
+            self.qr_label.show()
+        else:
+            self.qr_label.hide()
+        self.payment_status.setText("Aguardando o pagamento...")
+        self.payment_box.show()
+        self.poll_timer.start()
+
+    def copy_pix(self) -> None:
+        QGuiApplication.clipboard().setText(self.pix_code.toPlainText())
+        self.copy_button.setText("Código copiado")
+
+    def check_payment(self) -> None:
+        if self.payment_id and self.status_key:
+            self.request(
+                f"/pix/{self.payment_id}?key={self.status_key}",
+                self.on_payment_checked,
+            )
+
+    def on_payment_checked(self, reply: QNetworkReply) -> None:
+        data, error = self.reply_data(reply)
+        if error or not data:
+            return
+        if data.get("status") == "approved":
+            self.poll_timer.stop()
+            self.qr_label.hide()
+            self.pix_code.hide()
+            self.copy_button.hide()
+            self.payment_status.setText(
+                "Obrigado pelo seu apoio! Sua contribuição ajuda a manter este projeto."
+            )
+            self.load_progress()
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        self.poll_timer.stop()
+        super().closeEvent(event)
+
 class TaskRow(QWidget):
     clicked = pyqtSignal(str)
     double_clicked = pyqtSignal(str)
@@ -1422,8 +1867,9 @@ class TaskRow(QWidget):
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
-        self.double_clicked.emit(self.task_id)
-        super().mouseDoubleClickEvent(event)
+        task_id = self.task_id
+        event.accept()
+        self.double_clicked.emit(task_id)
 
 class TodoApp(QWidget):
     def __init__(self):
@@ -1470,6 +1916,11 @@ class TodoApp(QWidget):
         self.completed_list = QListWidget(self)
 
         self.setup_ui()
+        tray_icon = QIcon(str(APP_ICON)) if APP_ICON.exists() else QIcon()
+        self.tray_icon = QSystemTrayIcon(tray_icon, self)
+        self.tray_icon.setToolTip("Faz agora!")
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray_icon.show()
         if not self.prepare_store():
             sys.exit(0)
         self.load_tasks_into_ui()
@@ -1665,12 +2116,8 @@ class TodoApp(QWidget):
         )
 
     def show_about(self) -> None:
-        QMessageBox.information(
-            self,
-            "Sobre o Faz agora!",
-            "Faz agora! Desktop 2.0\n\n"
-            "Gerenciador de tarefas integrado ao Faz agora! para Android por meio do seu próprio WebDAV.",
-        )
+        dialog = SupportDialog(self)
+        dialog.exec()
 
     def prepare_store(self) -> bool:
         tasks_dir = self.config.get_tasks_dir()
@@ -1903,8 +2350,10 @@ class TodoApp(QWidget):
 
     def add_task(self) -> None:
         dialog = TaskEditorDialog(self, save_callback=self.create_or_update_from_dialog)
-        dialog.exec()
-        self.restore_main_after_editor()
+        try:
+            dialog.exec()
+        finally:
+            self.restore_main_after_editor()
 
     def edit_selected_task(self) -> None:
         task_id = self.get_selected_task_id()
@@ -1975,8 +2424,10 @@ class TodoApp(QWidget):
             task,
             save_callback=self.create_or_update_from_dialog,
         )
-        dialog.exec()
-        self.restore_main_after_editor()
+        try:
+            dialog.exec()
+        finally:
+            self.restore_main_after_editor()
 
     def restore_main_after_editor(self) -> None:
         self.show()
@@ -2018,7 +2469,9 @@ class TodoApp(QWidget):
                 updated_at=now,
                 subtasks=subtasks,
             )
-            self.store.add(task)
+            self.store.tasks.append(task)
+            self.store.sort_tasks()
+            self.save_tasks_async()
             self.load_tasks_into_ui(selected_task_id=task.id, switch_to_completed=False)
             self.status_label.setText("Tarefa adicionada.")
             return task
@@ -2033,7 +2486,12 @@ class TodoApp(QWidget):
         if task.due_at != old_due_at:
             task.reminded_at = ""
             self.notified_task_ids.discard(task.id)
-        self.store.update(task)
+        for index, current in enumerate(self.store.tasks):
+            if current.id == task.id:
+                self.store.tasks[index] = task
+                break
+        self.store.sort_tasks()
+        self.save_tasks_async()
         self.load_tasks_into_ui(selected_task_id=task.id, switch_to_completed=task.completed)
         self.status_label.setText("Tarefa atualizada.")
         return task
@@ -2046,10 +2504,9 @@ class TodoApp(QWidget):
 
     def task_meta_text(self, task: Task) -> str:
         meta_parts = []
-        details_preview = task.details_plain
-        if details_preview:
-            meta_parts.append(details_preview[:100] + ("..." if len(details_preview) > 100 else ""))
-        else:
+        if task.details_md.strip():
+            meta_parts.append("Descrição")
+        elif not task.subtasks:
             meta_parts.append("Sem detalhes")
 
         if task.subtasks:
@@ -2076,7 +2533,7 @@ class TodoApp(QWidget):
         summary_layout.setContentsMargins(0, 0, 0, 0)
         summary_layout.setSpacing(10)
 
-        checkbox = QCheckBox()
+        checkbox = IconCheckBox()
         checkbox.setProperty("task_id", task.id)
         checkbox.setChecked(task.completed)
         checkbox.stateChanged.connect(self.toggle_task_completion)
@@ -2214,10 +2671,10 @@ class TodoApp(QWidget):
                 subtask.completed = not subtask.completed
                 task.updated_at = now_str()
                 self.refresh_open_task_details(task)
-                self.save_subtask_change_async()
+                self.save_tasks_async()
                 return
 
-    def save_subtask_change_async(self) -> None:
+    def save_tasks_async(self) -> None:
         if not self.store:
             return
         self.async_save_revision += 1
@@ -2247,7 +2704,7 @@ class TodoApp(QWidget):
                 continue
             if self.store:
                 self.store._last_signature = signature
-            self.set_sync_success("Subtarefa salva e sincronizada.")
+            self.set_sync_success("Alteração salva e sincronizada.")
 
     def refresh_open_task_details(self, task: Task) -> None:
         for task_list in (self.pending_list, self.completed_list):
@@ -2613,7 +3070,17 @@ class TodoApp(QWidget):
             self.load_tasks_into_ui()
 
         for task in due_now:
-            QMessageBox.information(self, "Faz agora!", f"⏰ {task.title}\n\n{self.human_due_text(task)}")
+            title = f"⏰ {task.title}"
+            message = self.human_due_text(task)
+            if self.tray_icon.isVisible() and QSystemTrayIcon.supportsMessages():
+                self.tray_icon.showMessage(
+                    title,
+                    message,
+                    QSystemTrayIcon.MessageIcon.NoIcon,
+                    10000,
+                )
+            else:
+                QMessageBox.information(self, title, message)
 
 def main() -> int:
     app = QApplication(sys.argv)

@@ -6,10 +6,10 @@ if [[ $EUID -eq 0 ]]; then
   exit 1
 fi
 
-read -rsp "Cole o Access Token de teste do Mercado Pago: " MP_TOKEN
+read -rsp "Cole o Access Token de produção do Mercado Pago: " MP_TOKEN
 echo
-if [[ $MP_TOKEN != TEST-* ]]; then
-  echo "Use o token de teste nesta etapa."
+if [[ $MP_TOKEN != APP_USR-* ]]; then
+  echo "Use o Access Token de produção, iniciado por APP_USR-."
   exit 1
 fi
 
@@ -19,6 +19,7 @@ STATUS_SECRET="$(openssl rand -hex 32)"
 sudo apt-get update
 sudo apt-get install -y python3-venv certbot python3-certbot-nginx
 sudo install -d -o www-data -g www-data -m 0750 /opt/faz-pix
+sudo install -d -o www-data -g www-data -m 0750 /var/lib/faz-pix
 sudo install -o www-data -g www-data -m 0640 "$SCRIPT_DIR/faz_pix_api.py" /opt/faz-pix/faz_pix_api.py
 sudo install -o www-data -g www-data -m 0640 "$SCRIPT_DIR/requirements.txt" /opt/faz-pix/requirements.txt
 sudo python3 -m venv /opt/faz-pix/venv
@@ -42,4 +43,4 @@ sudo certbot --nginx -d faz.whats.men --redirect --non-interactive --agree-tos -
 
 curl --fail --silent --show-error https://faz.whats.men/health
 echo
-echo "API Pix de teste instalada com sucesso."
+echo "API Pix de produção instalada com sucesso."

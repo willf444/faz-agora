@@ -5,6 +5,8 @@ npm-debug.*
 *.jks
 *.keystore
 credentials.json
+__pycache__/
+*.py[cod]
 *.p8
 *.p12
 *.key
