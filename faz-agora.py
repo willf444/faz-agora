@@ -1593,10 +1593,11 @@ class ReminderDialog(QDialog):
         super().__init__(None)
         self.setWindowTitle("Faz agora!")
         self.setWindowFlags(
-            Qt.WindowType.Tool
+            Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
         )
+        self.setWindowModality(Qt.WindowModality.NonModal)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedWidth(620)
         self.setMinimumHeight(280)
@@ -1621,7 +1622,7 @@ class ReminderDialog(QDialog):
         close_button = QPushButton("×", header)
         close_button.setObjectName("reminderClose")
         close_button.setFixedSize(30, 30)
-        close_button.clicked.connect(self.reject)
+        close_button.pressed.connect(self.reject)
         header_layout.addWidget(app_name)
         header_layout.addStretch()
         header_layout.addWidget(close_button)
@@ -1651,7 +1652,7 @@ class ReminderDialog(QDialog):
         due_label.setWordWrap(True)
         ok_button = QPushButton("OK", body)
         ok_button.setMinimumWidth(90)
-        ok_button.clicked.connect(self.accept)
+        ok_button.pressed.connect(self.accept)
 
         body_layout.addWidget(self.task_text, 1)
         body_layout.addWidget(due_label)
@@ -1775,6 +1776,13 @@ class SupportDialog(QDialog):
         closing_message.setWordWrap(True)
         closing_message.setObjectName("mutedLabel")
         layout.addWidget(closing_message)
+
+        donation_call = QLabel("Considere fazer uma doação.")
+        donation_call.setWordWrap(True)
+        donation_call.setStyleSheet(
+            "color:#f5f5f5;background:transparent;font-size:15px;font-weight:700;"
+        )
+        layout.addWidget(donation_call)
 
         self.progress_label = QLabel("Meta inicial: carregando...")
         self.progress_label.setObjectName("sectionLabel")
@@ -2018,6 +2026,7 @@ class TodoApp(QWidget):
         self.notified_task_ids: set[str] = set()
         self.last_notified_task_id: Optional[str] = None
         self.reminder_dialogs: list[ReminderDialog] = []
+        self.support_dialog: Optional[SupportDialog] = None
         self.allow_quit = False
         self.expanded_task_id: Optional[str] = None
         self.details_scroll_positions: dict[str, int] = {}
@@ -2267,8 +2276,15 @@ class TodoApp(QWidget):
         )
 
     def show_about(self) -> None:
+        if self.support_dialog and self.support_dialog.isVisible():
+            self.support_dialog.raise_()
+            return
         dialog = SupportDialog(self)
-        dialog.exec()
+        dialog.setModal(False)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.destroyed.connect(lambda: setattr(self, "support_dialog", None))
+        self.support_dialog = dialog
+        dialog.show()
 
     def prepare_store(self) -> bool:
         tasks_dir = self.config.get_tasks_dir()
