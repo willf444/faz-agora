@@ -12,8 +12,7 @@ credentials.json
 *.orig.*
 web-build/
 
-# Native builds (managed workflow with CNG / EAS Prebuild)
-android/
+# Native builds
 ios/
 *.apk
 backups/
