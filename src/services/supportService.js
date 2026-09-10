@@ -1,4 +1,4 @@
-const API_URL = 'https://faz.cotas.men';
+const API_URL = 'https://faz.whats.men';
 
 async function request(path, options = {}) {
   const controller = new AbortController();

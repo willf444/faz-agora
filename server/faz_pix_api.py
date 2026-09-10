@@ -15,7 +15,7 @@ MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN", "")
 STATUS_SECRET = os.environ.get("STATUS_SECRET", "")
 MP_NOTIFICATION_URL = os.environ.get(
     "MP_NOTIFICATION_URL",
-    "https://faz.cotas.men/webhook/mercadopago",
+    "https://faz.whats.men/webhook/mercadopago",
 )
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 

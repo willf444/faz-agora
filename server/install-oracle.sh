@@ -27,19 +27,19 @@ sudo /opt/faz-pix/venv/bin/pip install -r /opt/faz-pix/requirements.txt
 sudo tee /etc/faz-pix.env >/dev/null <<EOF
 MP_ACCESS_TOKEN=$MP_TOKEN
 STATUS_SECRET=$STATUS_SECRET
-MP_NOTIFICATION_URL=https://faz.cotas.men/webhook/mercadopago
+MP_NOTIFICATION_URL=https://faz.whats.men/webhook/mercadopago
 EOF
 sudo chmod 600 /etc/faz-pix.env
 
 sudo install -m 0644 "$SCRIPT_DIR/faz-pix.service" /etc/systemd/system/faz-pix.service
-sudo install -m 0644 "$SCRIPT_DIR/nginx-faz.conf" /etc/nginx/sites-available/faz.cotas.men
-sudo ln -sfn /etc/nginx/sites-available/faz.cotas.men /etc/nginx/sites-enabled/faz.cotas.men
+sudo install -m 0644 "$SCRIPT_DIR/nginx-faz.conf" /etc/nginx/sites-available/faz.whats.men
+sudo ln -sfn /etc/nginx/sites-available/faz.whats.men /etc/nginx/sites-enabled/faz.whats.men
 sudo systemctl daemon-reload
 sudo systemctl enable --now faz-pix
 sudo nginx -t
 sudo systemctl reload nginx
-sudo certbot --nginx -d faz.cotas.men --redirect --non-interactive --agree-tos --register-unsafely-without-email
+sudo certbot --nginx -d faz.whats.men --redirect --non-interactive --agree-tos --register-unsafely-without-email
 
-curl --fail --silent --show-error https://faz.cotas.men/health
+curl --fail --silent --show-error https://faz.whats.men/health
 echo
 echo "API Pix de teste instalada com sucesso."
