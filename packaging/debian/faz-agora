@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python3 /usr/share/faz-agora/faz-agora.py "$@"

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Faz agora!
+Comment=Organize tarefas e sincronize com WebDAV
+Exec=faz-agora
+Icon=men.whats.FazAgora
+Terminal=false
+Categories=Office;ProjectManagement;
+Keywords=tarefas;lista;agenda;lembrete;webdav;
+StartupNotify=true

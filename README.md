@@ -50,6 +50,18 @@ python3 faz-agora.py
 
 As tarefas são armazenadas em `task.json`. Para compartilhar tarefas com o Android, selecione no aplicativo uma pasta WebDAV já montada pelo sistema.
 
+Para gerar o pacote Debian localmente:
+
+```bash
+npm run build:deb
+```
+
+O arquivo `.deb` será criado na pasta `dist/`.
+
+## Flatpak
+
+O manifesto para construção e futura submissão ao Flathub está em `packaging/flatpak/men.whats.FazAgora.yml`. O identificador do aplicativo Linux é `men.whats.FazAgora`.
+
 ## Sincronização WebDAV
 
 1. Configure ou escolha uma pasta em seu servidor WebDAV.

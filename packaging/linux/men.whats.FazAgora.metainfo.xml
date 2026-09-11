@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>men.whats.FazAgora</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Faz agora!</name>
+  <summary>Organize tarefas e sincronize-as com seus dispositivos</summary>
+  <description>
+    <p>Faz agora! é um gerenciador de tarefas livre, sem anúncios e sem rastreamento.</p>
+    <p>Crie tarefas e subtarefas, defina lembretes e recorrências e sincronize seus dados com um servidor WebDAV escolhido por você.</p>
+  </description>
+  <developer id="men.whats">
+    <name>Willian Ferreira</name>
+  </developer>
+  <launchable type="desktop-id">men.whats.FazAgora.desktop</launchable>
+  <provides>
+    <binary>faz-agora</binary>
+  </provides>
+  <categories>
+    <category>Office</category>
+    <category>Utility</category>
+  </categories>
+  <keywords>
+    <keyword>tarefas</keyword>
+    <keyword>lembretes</keyword>
+    <keyword>WebDAV</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/willf444/faz-agora</url>
+  <url type="bugtracker">https://github.com/willf444/faz-agora/issues</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="2.3.0" date="2026-09-11">
+      <description>
+        <p>Primeira versão pública para Android e Linux.</p>
+      </description>
+    </release>
+  </releases>
+</component>
