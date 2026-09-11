@@ -37,10 +37,23 @@ export const markdownToEditorHtml = (markdown = '') => {
     if (inList) output.push('</ul>');
     inList = false;
   };
+  const appendBlankLine = () => {
+    for (let index = output.length - 1; index >= 0; index -= 1) {
+      const updated = output[index].replace(/<\/(div|h[1-3]|li)>$/, '<br></$1>');
+      if (updated !== output[index]) {
+        output[index] = updated;
+        return;
+      }
+    }
+  };
 
   lines.forEach((line) => {
     const heading = line.match(/^(#{1,3})\s+(.*)$/);
     const listItem = line.match(/^[-*]\s+(.*)$/);
+    if (!line) {
+      appendBlankLine();
+      return;
+    }
     if (listItem) {
       if (!inList) output.push('<ul>');
       inList = true;
@@ -49,9 +62,7 @@ export const markdownToEditorHtml = (markdown = '') => {
     }
 
     closeList();
-    if (!line) {
-      output.push('<div><br></div>');
-    } else if (heading) {
+    if (heading) {
       const level = heading[1].length;
       output.push(`<h${level}>${markdownRenderer.renderInline(heading[2])}</h${level}>`);
     } else {
@@ -68,7 +79,7 @@ export const editorHtmlToMarkdown = (html = '') => {
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
     // O HTML do editor contém quebras usadas apenas para formatar o código.
     // Recrie somente as quebras visuais representadas por blocos e <br>.
-    .replace(/<\/p>\s*<p\b/gi, '</p><br><p')
+    .replace(/<(div|p)\b[^>]*>\s*<br\s*\/?>\s*<\/\1>/gi, '<br>')
     .replace(/\r?\n/g, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**')
@@ -85,8 +96,7 @@ export const editorHtmlToMarkdown = (html = '') => {
 
   output = decodeHtmlEntities(output)
     .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n[ \t]+/g, '\n')
-    .replace(/\n{3,}/g, '\n\n');
+    .replace(/\n[ \t]+/g, '\n');
 
   return normalizeMarkdownFormatting(output).trim();
 };
