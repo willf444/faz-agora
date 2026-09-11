@@ -35,6 +35,10 @@ export const editorHtmlToMarkdown = (html = '') => {
   let output = html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    // O HTML do editor contém quebras usadas apenas para formatar o código.
+    // Recrie somente as quebras visuais representadas por blocos e <br>.
+    .replace(/<\/p>\s*<p\b/gi, '</p><br><p')
+    .replace(/\r?\n/g, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**')
     .replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, '*$2*')
@@ -51,6 +55,7 @@ export const editorHtmlToMarkdown = (html = '') => {
   output = decodeHtmlEntities(output)
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n[ \t]+/g, '\n')
+    .replace(/(^- .+)\n{2,}(?=- )/gm, '$1\n')
     .replace(/\n{3,}/g, '\n\n');
 
   return normalizeMarkdownFormatting(output).trim();

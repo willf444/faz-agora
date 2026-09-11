@@ -113,7 +113,11 @@ export default function SupportSection() {
         <Text variant="labelLarge" style={styles.goalLabel}>
           Meta mensal: R$ {summary.raised.toFixed(2).replace('.', ',')} de R$ {summary.goal.toFixed(2).replace('.', ',')}
         </Text>
-        <ProgressBar progress={Math.min(summary.raised / summary.goal, 1)} style={styles.progress} />
+        <ProgressBar
+          progress={Math.min(summary.raised / summary.goal, 1)}
+          color="#22c55e"
+          style={styles.progress}
+        />
         <Text variant="bodySmall" style={styles.costs}>
           VPS: R$ 50,00{`\n`}Domínio: R$ 5,00{`\n`}IA: R$ 100,00{`\n`}Luz: R$ 20,00{`\n`}Café pro dev :D — R$ 325,00
         </Text>

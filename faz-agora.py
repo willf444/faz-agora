@@ -408,11 +408,18 @@ def markdown_to_html(md: str) -> str:
             out.append("</ul>")
             in_ul = False
 
-    for line in lines:
+    for index, line in enumerate(lines):
         raw = line.rstrip()
         stripped = raw.strip()
 
         if not stripped:
+            if in_ul:
+                next_line = next(
+                    (candidate.strip() for candidate in lines[index + 1:] if candidate.strip()),
+                    "",
+                )
+                if next_line.startswith(("- ", "* ")):
+                    continue
             close_ul()
             out.append("<br>")
             continue
@@ -447,9 +454,9 @@ def markdown_to_html(md: str) -> str:
       <style>
         body {{ font-family: Arial; color:#e5e5e5; background:#101010; line-height:1.45; }}
         h1,h2,h3 {{ color:#fafafa; margin:8px 0 6px 0; }}
-        p {{ margin:6px 0; }}
-        ul {{ margin:6px 0 6px 18px; padding:0; }}
-        li {{ margin:4px 0; }}
+        p {{ margin:0; }}
+        ul {{ margin:0 0 0 18px; padding:0; }}
+        li {{ margin:0; }}
         code {{ background:#2a2a2a; padding:2px 4px; border-radius:4px; }}
         strong {{ font-weight:700; }}
         em {{ font-style:italic; }}
@@ -635,9 +642,9 @@ def task_details_to_html(task: Task) -> str:
       h1 {{ font-size:20px; margin:5px 0; }}
       h2 {{ font-size:17px; margin:5px 0; }}
       h3 {{ font-size:15px; margin:4px 0; }}
-      p {{ margin:4px 0; }}
-      ul {{ margin:4px 0 4px 18px; padding:0; }}
-      li {{ margin:2px 0; }}
+      p {{ margin:0; }}
+      ul {{ margin:0 0 0 18px; padding:0; }}
+      li {{ margin:0; }}
       a {{ color:#86efac; text-decoration:underline; }}
       code {{ background:#2a2a2a; padding:2px 4px; }}
     </style></head><body>{body}</body></html>
