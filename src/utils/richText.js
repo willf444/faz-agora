@@ -27,9 +27,40 @@ export const normalizeMarkdownFormatting = (markdown = '') => markdown
   .replace(/(^|[^*])\*\*([^*\n]*?\S)[ \t]+\*\*(?!\*)/gm, '$1**$2** ')
   .replace(/(^|[^*])\*([^*\n]*?\S)[ \t]+\*(?!\*)/gm, '$1*$2* ');
 
-export const markdownToEditorHtml = (markdown = '') => (
-  markdown.trim() ? markdownRenderer.render(normalizeMarkdownFormatting(markdown)) : ''
-);
+export const markdownToEditorHtml = (markdown = '') => {
+  if (!markdown.trim()) return '';
+
+  const lines = normalizeMarkdownFormatting(markdown).split('\n');
+  const output = [];
+  let inList = false;
+  const closeList = () => {
+    if (inList) output.push('</ul>');
+    inList = false;
+  };
+
+  lines.forEach((line) => {
+    const heading = line.match(/^(#{1,3})\s+(.*)$/);
+    const listItem = line.match(/^[-*]\s+(.*)$/);
+    if (listItem) {
+      if (!inList) output.push('<ul>');
+      inList = true;
+      output.push(`<li>${markdownRenderer.renderInline(listItem[1])}</li>`);
+      return;
+    }
+
+    closeList();
+    if (!line) {
+      output.push('<div><br></div>');
+    } else if (heading) {
+      const level = heading[1].length;
+      output.push(`<h${level}>${markdownRenderer.renderInline(heading[2])}</h${level}>`);
+    } else {
+      output.push(`<div>${markdownRenderer.renderInline(line)}</div>`);
+    }
+  });
+  closeList();
+  return output.join('');
+};
 
 export const editorHtmlToMarkdown = (html = '') => {
   let output = html
@@ -55,7 +86,6 @@ export const editorHtmlToMarkdown = (html = '') => {
   output = decodeHtmlEntities(output)
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n[ \t]+/g, '\n')
-    .replace(/(^- .+)\n{2,}(?=- )/gm, '$1\n')
     .replace(/\n{3,}/g, '\n\n');
 
   return normalizeMarkdownFormatting(output).trim();

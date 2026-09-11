@@ -1125,5 +1125,5 @@ const RICH_EDITOR_STYLE = {
   caretColor: '#f5f5f5',
   placeholderColor: '#737373',
   initialCSSText: ':root { color-scheme: dark; } ::selection { background: #525252; color: #ffffff; }',
-  contentCSSText: 'font-size: 16px; line-height: 1.45; padding: 10px 12px;',
+  contentCSSText: 'font-size: 16px; line-height: 1.45; padding: 10px 12px; p, div { margin: 0; } ul, ol { margin-top: 0; margin-bottom: 0; } li { margin: 0; }',
 };
