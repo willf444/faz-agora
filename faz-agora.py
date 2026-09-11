@@ -401,6 +401,7 @@ def markdown_to_html(md: str) -> str:
     lines = md.splitlines()
     out = []
     in_ul = False
+    pending_blank_lines = 0
 
     def close_ul():
         nonlocal in_ul
@@ -408,43 +409,39 @@ def markdown_to_html(md: str) -> str:
             out.append("</ul>")
             in_ul = False
 
-    for index, line in enumerate(lines):
+    for line in lines:
         raw = line.rstrip()
         stripped = raw.strip()
 
         if not stripped:
-            if in_ul:
-                next_line = next(
-                    (candidate.strip() for candidate in lines[index + 1:] if candidate.strip()),
-                    "",
-                )
-                if next_line.startswith(("- ", "* ")):
-                    continue
             close_ul()
-            out.append("<br>")
+            pending_blank_lines += 1
             continue
+
+        blank_prefix = "<br>" * pending_blank_lines
+        pending_blank_lines = 0
 
         if stripped.startswith("### "):
             close_ul()
-            out.append(f"<h3>{inline_md(stripped[4:])}</h3>")
+            out.append(f"<h3>{blank_prefix}{inline_md(stripped[4:])}</h3>")
             continue
         if stripped.startswith("## "):
             close_ul()
-            out.append(f"<h2>{inline_md(stripped[3:])}</h2>")
+            out.append(f"<h2>{blank_prefix}{inline_md(stripped[3:])}</h2>")
             continue
         if stripped.startswith("# "):
             close_ul()
-            out.append(f"<h1>{inline_md(stripped[2:])}</h1>")
+            out.append(f"<h1>{blank_prefix}{inline_md(stripped[2:])}</h1>")
             continue
         if stripped.startswith("- ") or stripped.startswith("* "):
             if not in_ul:
                 out.append("<ul>")
                 in_ul = True
-            out.append(f"<li>{inline_md(stripped[2:])}</li>")
+            out.append(f"<li>{blank_prefix}{inline_md(stripped[2:])}</li>")
             continue
 
         close_ul()
-        out.append(f"<p>{inline_md(stripped)}</p>")
+        out.append(f"<p>{blank_prefix}{inline_md(stripped)}</p>")
 
     close_ul()
     body = "\n".join(out)
@@ -515,12 +512,16 @@ def editor_document_to_markdown(document: QTextDocument) -> str:
                 parts.append(text)
             iterator += 1
 
-        line = "".join(parts)
+        line = "".join(parts).replace("\u2028", "\n")
+        leading_breaks = len(line) - len(line.lstrip("\n"))
+        line = line[leading_breaks:]
         text_list = block.textList()
         if text_list is not None:
             line = f"- {line}"
         elif heading_level in (1, 2, 3):
             line = f"{'#' * heading_level} {line}"
+        if leading_breaks:
+            line = ("\n" * leading_breaks) + line
         lines.append(line)
         block = block.next()
     return "\n".join(lines).rstrip()
