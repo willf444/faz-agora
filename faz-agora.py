@@ -452,7 +452,7 @@ def markdown_to_html(md: str) -> str:
     <head>
       <style>
         body {{ font-family: Arial; color:#e5e5e5; background:#101010; line-height:1.45; }}
-        h1,h2,h3 {{ color:#fafafa; margin:8px 0 6px 0; }}
+        h1,h2,h3 {{ color:#fafafa; margin:0; }}
         p {{ margin:0; }}
         ul {{ margin:0 0 0 18px; padding:0; }}
         li {{ margin:0; }}
@@ -646,9 +646,9 @@ def task_details_to_html(task: Task) -> str:
       .subtask.completed {{ color:#737373; text-decoration:line-through; }}
       .state {{ color:#a3a3a3; font-size:11px; font-weight:700; margin-bottom:3px; }}
       .check {{ color:#86efac; font-size:17px; text-decoration:none; }}
-      h1 {{ font-size:20px; margin:5px 0; }}
-      h2 {{ font-size:17px; margin:5px 0; }}
-      h3 {{ font-size:15px; margin:4px 0; }}
+      h1 {{ font-size:20px; margin:0; }}
+      h2 {{ font-size:17px; margin:0; }}
+      h3 {{ font-size:15px; margin:0; }}
       p {{ margin:0; }}
       ul {{ margin:0 0 0 18px; padding:0; }}
       li {{ margin:0; }}

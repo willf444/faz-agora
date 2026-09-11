@@ -20,7 +20,7 @@ import {
   Divider,
   Button,
 } from 'react-native-paper';
-import Markdown from 'react-native-markdown-display';
+import ExactMarkdown from '../components/ExactMarkdown';
 import { format, isPast, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import * as Crypto from 'expo-crypto';
@@ -516,9 +516,9 @@ export default function HomeScreen({ navigation }) {
                     <Text variant="labelMedium" style={styles.sectionLabel}>
                       DETALHES:
                     </Text>
-                    <Markdown style={markdownStyles}>
+                    <ExactMarkdown style={markdownStyles}>
                       {normalizeMarkdownFormatting(item.details_md)}
-                    </Markdown>
+                    </ExactMarkdown>
                   </View>
                 )}
 
@@ -539,9 +539,9 @@ export default function HomeScreen({ navigation }) {
                           color={theme.colors.primary}
                         />
                         <View style={styles.subtaskMarkdownContainer}>
-                          <Markdown style={s.completed ? completedSubtaskMarkdownStyles : subtaskMarkdownStyles}>
+                          <ExactMarkdown style={s.completed ? completedSubtaskMarkdownStyles : subtaskMarkdownStyles}>
                             {normalizeMarkdownFormatting(s.title)}
-                          </Markdown>
+                          </ExactMarkdown>
                         </View>
                       </TouchableOpacity>
                     ))}

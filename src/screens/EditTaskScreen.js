@@ -24,7 +24,7 @@ import {
   Card,
 } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import Markdown from 'react-native-markdown-display';
+import ExactMarkdown from '../components/ExactMarkdown';
 import {
   actions,
   RichEditor,
@@ -627,9 +627,9 @@ export default function EditTaskScreen({ route, navigation }) {
                 activeOpacity={0.75}
                 onPress={() => selectSubtask(s)}
               >
-                <Markdown style={s.completed ? completedMarkdownStyles : subtaskMarkdownStyles}>
+                <ExactMarkdown style={s.completed ? completedMarkdownStyles : subtaskMarkdownStyles}>
                   {normalizeMarkdownFormatting(s.title)}
-                </Markdown>
+                </ExactMarkdown>
               </TouchableOpacity>
             </View>
           ))}
