@@ -1,0 +1,42 @@
+Categories:
+  - Time
+License: GPL-3.0-or-later
+AntiFeatures:
+  - NonFreeNet
+AuthorName: Willian Ferreira
+AuthorEmail: adm@whats.men
+WebSite: https://github.com/willf444/faz-agora
+SourceCode: https://github.com/willf444/faz-agora
+IssueTracker: https://github.com/willf444/faz-agora/issues
+
+AutoName: Faz agora!
+Description: |-
+  Gerenciador de tarefas livre, sem anúncios e sem rastreamento.
+
+  Crie tarefas, subtarefas, recorrências e lembretes. O aplicativo funciona
+  offline e pode sincronizar seus dados com um servidor WebDAV escolhido por
+  você.
+
+RepoType: git
+Repo: https://github.com/willf444/faz-agora.git
+
+Builds:
+  - versionName: 2.3.0
+    versionCode: 20
+    commit: v2.3.0
+    subdir: android/app
+    sudo:
+      - apt-get update
+      - apt-get install -y npm
+    init:
+      - cd ../..
+      - npm ci
+    gradle:
+      - yes
+    scandelete:
+      - node_modules/
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 2.3.0
+CurrentVersionCode: 20

@@ -1,0 +1,7 @@
+Primeira versão pública do Faz agora! 2.3.
+
+- Interface escura e compacta.
+- Tarefas e subtarefas com formatação visual.
+- Recorrências e lembretes.
+- Sincronização WebDAV bidirecional.
+- Sem anúncios e sem rastreamento.

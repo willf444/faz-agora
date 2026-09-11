@@ -1,0 +1,18 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+
+override_dh_auto_test:
+	python3 -m py_compile faz-agora.py
+
+override_dh_auto_install:
+	install -Dm755 packaging/debian/faz-agora debian/faz-agora/usr/bin/faz-agora
+	install -Dm644 faz-agora.py debian/faz-agora/usr/share/faz-agora/faz-agora.py
+	install -Dm644 assets/icon.png debian/faz-agora/usr/share/faz-agora/assets/icon.png
+	install -Dm644 assets/check-white.svg debian/faz-agora/usr/share/faz-agora/assets/check-white.svg
+	install -Dm644 assets/icon.png debian/faz-agora/usr/share/icons/hicolor/1024x1024/apps/men.whats.FazAgora.png
+	install -Dm644 packaging/linux/men.whats.FazAgora.desktop debian/faz-agora/usr/share/applications/men.whats.FazAgora.desktop
+	install -Dm644 packaging/linux/men.whats.FazAgora.metainfo.xml debian/faz-agora/usr/share/metainfo/men.whats.FazAgora.metainfo.xml

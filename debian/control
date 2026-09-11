@@ -1,0 +1,18 @@
+Source: faz-agora
+Section: utils
+Priority: optional
+Maintainer: Willian Ferreira <adm@whats.men>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/willf444/faz-agora
+Vcs-Browser: https://github.com/willf444/faz-agora
+Vcs-Git: https://github.com/willf444/faz-agora.git
+
+Package: faz-agora
+Architecture: all
+Depends: ${misc:Depends}, python3, python3-pyqt6
+Description: gerenciador de tarefas com sincronização WebDAV
+ Faz agora! organiza tarefas, subtarefas, recorrências e lembretes.
+ Funciona offline e permite sincronização por um servidor WebDAV escolhido
+ pelo usuário.

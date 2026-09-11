@@ -1,0 +1,7 @@
+Faz agora! é um gerenciador de tarefas livre, sem anúncios e sem rastreamento.
+
+Crie tarefas rápidas ou defina data e hora. Organize planos com descrições formatadas e subtarefas interativas. Configure recorrências diárias, semanais, mensais, anuais ou personalizadas.
+
+O aplicativo funciona offline. Quando desejar usar mais de um dispositivo, configure seu próprio servidor WebDAV para sincronizar o mesmo arquivo de tarefas entre Android e Linux.
+
+Seus dados permanecem no aparelho ou no servidor WebDAV escolhido por você. O Faz agora! não utiliza telemetria, anúncios, cookies comportamentais ou venda de dados.

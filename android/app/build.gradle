@@ -6,14 +6,17 @@ apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def localCredentialsFile = rootProject.file("../credentials.json")
-if (!localCredentialsFile.exists()) {
-    throw new GradleException("Arquivo local credentials.json não encontrado.")
+def forceUnsignedRelease = System.getenv("FAZ_AGORA_UNSIGNED_BUILD") == "1"
+def localKeystore = null
+def localKeystoreFile = null
+if (localCredentialsFile.exists() && !forceUnsignedRelease) {
+    localKeystore = new JsonSlurper().parse(localCredentialsFile).android.keystore
+    localKeystoreFile = rootProject.file("../${localKeystore.keystorePath}")
+    if (!localKeystoreFile.exists()) {
+        throw new GradleException("Chave local Android não encontrada em ${localKeystoreFile}.")
+    }
 }
-def localKeystore = new JsonSlurper().parse(localCredentialsFile).android.keystore
-def localKeystoreFile = rootProject.file("../${localKeystore.keystorePath}")
-if (!localKeystoreFile.exists()) {
-    throw new GradleException("Chave local Android não encontrada em ${localKeystoreFile}.")
-}
+def hasLocalReleaseSigning = localKeystore != null
 
 static def versionToNumber(major, minor, patch) {
   return patch * 100 + minor * 10000 + major * 1000000
@@ -135,11 +138,13 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-        release {
-            storeFile localKeystoreFile
-            storePassword localKeystore.keystorePassword
-            keyAlias localKeystore.keyAlias
-            keyPassword localKeystore.keyPassword
+        if (hasLocalReleaseSigning) {
+            release {
+                storeFile localKeystoreFile
+                storePassword localKeystore.keystorePassword
+                keyAlias localKeystore.keyAlias
+                keyPassword localKeystore.keyPassword
+            }
         }
     }
     buildTypes {
@@ -147,7 +152,9 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig signingConfigs.release
+            if (hasLocalReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
