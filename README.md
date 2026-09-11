@@ -1,74 +1,80 @@
-# Faz agora! (Android)
+# Faz agora!
 
-Versão mobile do gerenciador de tarefas **Faz agora!** baseada no script desktop `faz-agora.py`. Desenvolvido em **React Native** com **Expo (SDK 51)** e interface em **Material Design 3**.
+Gerenciador de tarefas livre, sem anúncios e sem rastreamento, disponível para Android e Linux.
 
----
+O Faz agora! funciona offline e pode sincronizar tarefas entre dispositivos por meio de um servidor WebDAV escolhido pelo usuário. Os aplicativos Android e Linux utilizam o mesmo arquivo `task.json`.
 
-## 🚀 Funcionalidades
+## Recursos
 
-- **Criação rápida**: Adicione tarefas imediatamente no topo sem data (equivalente ao `quick_add` do desktop).
-- **Criação e edição completa**:
-  - Título com validação.
-  - Data e hora com seletor nativo Android.
-  - Recorrência inteligente (**Diariamente**, **Semanalmente**, **Mensalmente no mesmo dia**, **Anualmente no mesmo dia**).
-  - Recorrência personalizada a cada quantidade de horas, dias ou semanas.
-  - Editor visual com negrito, itálico, listas, títulos e links, mantendo compatibilidade com o arquivo compartilhado do desktop.
-  - Gerenciamento de subtarefas (checklist interativo).
-- **Lógica de Recorrência Fiel ao Desktop**:
-  - Conclusão adiantada solicita confirmação antes de avançar.
-  - Avanço automático para a próxima ocorrência recalculando o vencimento exato e reagendando as notificações.
-- **Notificações Locais**:
-  - Notificações agendadas localmente com canal de alta prioridade, som e vibração.
-- **Persistência Local**:
-  - Armazenamento offline no dispositivo com `@react-native-async-storage/async-storage`.
-  - Ordenação idêntica ao `faz-agora.py`: tarefas com vencimento primeiro, tarefas sem data em ordem alfabética e tarefas concluídas ordenadas pela data de conclusão mais recente.
-- **Sincronização WebDAV**:
-  - Mesclagem bidirecional do `task.json`, incluindo edições e exclusões feitas no APK ou no desktop.
-  - Senha armazenada pelo armazenamento seguro do Android.
-  - Sincronização manual pelo ícone no cabeçalho ou automática ao abrir o aplicativo.
-- **Busca e Limpeza**:
-  - Busca instantânea por título, detalhes markdown, subtarefas e status.
-  - Botão para limpar todas as tarefas concluídas.
+- Tarefas rápidas ou com data e hora.
+- Recorrência diária, semanal, mensal, anual ou personalizada.
+- Descrições e subtarefas com formatação visual.
+- Checklist interativo de subtarefas.
+- Busca em tarefas pendentes e concluídas.
+- Notificações locais.
+- Sincronização WebDAV bidirecional.
+- Funcionamento offline.
+- Interface escura e compacta.
 
----
+## Privacidade
 
-## 📱 Como Testar no Celular (Expo Go)
+O Faz agora! não possui anúncios, telemetria ou rastreamento. As tarefas permanecem no dispositivo, salvo quando o próprio usuário configura a sincronização WebDAV.
 
-1. No computador, abra a pasta do projeto no terminal:
-   ```bash
-   cd ~/Projetos/Tarefas/willdo-mobile
-   ```
+No Android, a senha WebDAV é armazenada no armazenamento seguro do sistema. No Linux, a conexão com o compartilhamento WebDAV é gerenciada pelo ambiente do usuário.
 
-2. Inicie o servidor de desenvolvimento:
-   ```bash
-   npx expo start
-   ```
+## Android
 
-3. No seu celular Android:
-   - Instale o aplicativo **Expo Go** na Google Play Store.
-   - Abra o Expo Go e escaneie o **QR Code** exibido no terminal (garanta que o computador e o celular estejam na mesma rede Wi-Fi).
+O aplicativo Android foi desenvolvido com React Native e Expo. Para executar o projeto em modo de desenvolvimento:
 
----
-
-## 📦 Como Gerar o Arquivo APK para Instalar no Android
-
-O APK é compilado e assinado inteiramente no computador, sem login, envio do projeto ou construção pelo EAS. A chave de assinatura fica somente no armazenamento local e não entra no Git.
-
-Execute:
 ```bash
-cd ~/Projetos/Tarefas/willdo-mobile
+npm install
+npx expo start
+```
+
+Para gerar localmente um APK assinado, depois de configurar a chave de assinatura:
+
+```bash
 npm run build:apk
 ```
 
-Ao terminar, o APK assinado será criado na raiz do projeto. Para gerar o pacote destinado a lojas compatíveis com AAB, use `npm run build:aab`.
+O script de construção não envia o código para serviços externos.
 
----
+## Linux
 
-## ☁️ Conectar o APK ao Faz agora! do Linux
+O aplicativo para Linux requer Python 3 e PyQt6:
 
-1. No Linux, escolha como diretório de tarefas uma pasta WebDAV montada. O desktop usará o arquivo `task.json` dessa pasta e perceberá alterações externas automaticamente.
-2. No APK, toque na engrenagem do cabeçalho.
-3. Informe a URL da pasta no servidor WebDAV, o usuário e a senha. O aplicativo cria o `task.json` automaticamente na primeira sincronização.
-4. Toque em **Salvar e sincronizar**.
+```bash
+python3 -m pip install PyQt6
+python3 faz-agora.py
+```
 
-Use preferencialmente uma URL HTTPS. O primeiro sync une as tarefas existentes nos dois lados; nos próximos, o aplicativo considera a última sincronização para propagar também as exclusões.
+As tarefas são armazenadas em `task.json`. Para compartilhar tarefas com o Android, selecione no aplicativo uma pasta WebDAV já montada pelo sistema.
+
+## Sincronização WebDAV
+
+1. Configure ou escolha uma pasta em seu servidor WebDAV.
+2. No Linux, selecione a pasta montada que conterá `task.json`.
+3. No Android, informe a URL da pasta WebDAV, o usuário e a senha.
+4. Use **Salvar e sincronizar** na primeira conexão.
+
+O arquivo `task.json` será criado automaticamente quando necessário. Use sempre HTTPS ao informar credenciais diretamente no Android.
+
+## Apoie o projeto
+
+O Faz agora! é mantido por um desenvolvedor independente. Apoios voluntários ajudam a custear servidor, domínio, ferramentas e manutenção.
+
+Mais informações estão disponíveis na área **Sobre o Faz agora!** dos aplicativos.
+
+Conheça também [whats.men](https://whats.men), um projeto para divulgar redes sociais e contatos em um único link.
+
+## Servidor de apoio
+
+A pasta `server/` contém a API utilizada exclusivamente para gerar contribuições voluntárias via Pix e apresentar o progresso mensal. Credenciais e dados de pagamentos não fazem parte deste repositório.
+
+O servidor não é necessário para armazenar ou sincronizar tarefas.
+
+## Licença
+
+Copyright © 2026 Willian Ferreira.
+
+Este projeto é software livre, distribuído sob a licença [GNU General Public License v3.0 ou posterior](LICENSE).

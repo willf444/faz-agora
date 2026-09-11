@@ -25,6 +25,10 @@ async function request(path, options = {}) {
 }
 
 export const supportService = {
+  getSummary() {
+    return request('/support');
+  },
+
   createPix(amount, email) {
     return request('/pix', {
       method: 'POST',

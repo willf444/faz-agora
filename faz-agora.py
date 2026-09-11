@@ -55,7 +55,9 @@ APP_ICON = Path(__file__).resolve().parent / "assets" / "icon.png"
 CHECK_ICON = Path(__file__).resolve().parent / "assets" / "check-white.svg"
 TASKS_FILENAME = "task.json"
 SUPPORT_API_URL = "https://faz.whats.men"
-SUPPORT_GOAL = 200.0
+SUPPORT_GOAL = 500.0
+WHATS_MEN_URL = "https://whats.men"
+PROJECT_URL = "https://github.com/willf444/faz-agora"
 DATE_FMT = "%d/%m/%Y %H:%M"
 DISPLAY_DATE_FMT = "dd/MM/yyyy HH:mm"
 
@@ -1762,29 +1764,20 @@ class SupportDialog(QDialog):
 
         description = QLabel(
             "Este projeto é de um desenvolvedor independente e precisa da sua colaboração. "
-            "Todo o código está disponível gratuitamente."
+            "Todo o código está disponível gratuitamente. Sem anúncio e sem rastreio, "
+            "sua privacidade é preservada."
         )
         description.setWordWrap(True)
         description.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(description)
 
-        android_text = QLabel(
-            "Um aplicativo para Android foi construído e será disponibilizado para sincronizar "
-            "as tarefas. Somente o cadastro na Play Store custa $25 — vinte e cinco dólares —, "
-            "o que pode chegar perto de R$ 200 após conversão e impostos. Sendo assim, o projeto "
-            "precisa de apoiadores para dar esse segundo passo."
+        project_link = QLabel(
+            f'Link aberto do projeto: <a style="color:#d4d4d4;" href="{PROJECT_URL}">'
+            "github.com/willf444/faz-agora</a>"
         )
-        android_text.setWordWrap(True)
-        android_text.setObjectName("mutedLabel")
-        android_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(android_text)
-
-        invitation = QLabel(
-            "Teste e use à vontade no seu Linux. Espero que o aplicativo ajude você a se manter "
-            "mais organizado e facilite sua vida."
-        )
-        invitation.setWordWrap(True)
-        layout.addWidget(invitation)
+        project_link.setObjectName("mutedLabel")
+        project_link.setOpenExternalLinks(True)
+        layout.addWidget(project_link)
 
         closing_message = QLabel(
             "Desenvolvedor: Willian Ferreira"
@@ -1793,6 +1786,22 @@ class SupportDialog(QDialog):
         closing_message.setObjectName("mutedLabel")
         layout.addWidget(closing_message)
 
+        related_title = QLabel("Conheça também whats.men")
+        related_title.setObjectName("sectionLabel")
+        layout.addWidget(related_title)
+        related_text = QLabel(
+            "Um link inteligente para o seu negócio. Um projeto para divulgar redes sociais e contatos."
+        )
+        related_text.setWordWrap(True)
+        related_text.setObjectName("mutedLabel")
+        layout.addWidget(related_text)
+        related_button = QPushButton("Conhecer o whats.men")
+        related_button.setObjectName("secondaryButton")
+        related_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(WHATS_MEN_URL))
+        )
+        layout.addWidget(related_button)
+
         donation_call = QLabel("Considere fazer uma doação.")
         donation_call.setWordWrap(True)
         donation_call.setStyleSheet(
@@ -1800,7 +1809,7 @@ class SupportDialog(QDialog):
         )
         layout.addWidget(donation_call)
 
-        self.progress_label = QLabel("Meta inicial: carregando...")
+        self.progress_label = QLabel("Meta mensal: carregando...")
         self.progress_label.setObjectName("sectionLabel")
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, int(SUPPORT_GOAL * 100))
@@ -1808,6 +1817,14 @@ class SupportDialog(QDialog):
         self.progress_bar.setTextVisible(False)
         layout.addWidget(self.progress_label)
         layout.addWidget(self.progress_bar)
+
+        costs = QLabel(
+            "VPS: R$ 50,00\nDomínio: R$ 5,00\nIA: R$ 100,00\nLuz: R$ 20,00\n"
+            "Café pro dev :D — R$ 325,00"
+        )
+        costs.setWordWrap(True)
+        costs.setObjectName("mutedLabel")
+        layout.addWidget(costs)
 
         amount_row = QHBoxLayout()
         amount_row.setSpacing(8)
@@ -1934,13 +1951,15 @@ class SupportDialog(QDialog):
     def on_progress_loaded(self, reply: QNetworkReply) -> None:
         data, error = self.reply_data(reply)
         if error or not data:
-            self.progress_label.setText("Meta inicial: R$ 200,00")
+            self.progress_label.setText("Meta mensal: R$ 0,00 de R$ 500,00")
             return
         raised = max(0.0, float(data.get("raised", 0)))
         goal = max(1.0, float(data.get("goal", SUPPORT_GOAL)))
         self.progress_bar.setRange(0, int(goal * 100))
         self.progress_bar.setValue(min(int(raised * 100), int(goal * 100)))
-        self.progress_label.setText(f"{self.brl(raised)} de {self.brl(goal)}")
+        self.progress_label.setText(
+            f"Meta mensal: {self.brl(raised)} de {self.brl(goal)}"
+        )
 
     def create_pix(self) -> None:
         amount = self.current_amount()
@@ -2014,6 +2033,7 @@ class SupportDialog(QDialog):
             self.payment_status.setText(
                 "Obrigado pelo seu apoio! Sua contribuição ajuda a manter este projeto."
             )
+            self.load_progress()
             self.load_progress()
 
     def closeEvent(self, event) -> None:  # type: ignore[override]

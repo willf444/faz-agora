@@ -5,8 +5,10 @@ import os
 import re
 import threading
 import uuid
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -21,9 +23,10 @@ MP_NOTIFICATION_URL = os.environ.get(
     "https://faz.whats.men/webhook/mercadopago",
 )
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-SUPPORT_GOAL = Decimal("200.00")
+SUPPORT_GOAL = Decimal("500.00")
 SUPPORT_DATA_FILE = Path(os.environ.get("SUPPORT_DATA_FILE", "/var/lib/faz-pix/support.json"))
 SUPPORT_DATA_LOCK = threading.Lock()
+SUPPORT_TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 app = FastAPI(title="Faz Pix API", docs_url=None, redoc_url=None)
 
@@ -64,6 +67,10 @@ def save_support_data(data: dict) -> None:
     temporary.replace(SUPPORT_DATA_FILE)
 
 
+def current_support_month() -> str:
+    return datetime.now(SUPPORT_TIMEZONE).strftime("%Y-%m")
+
+
 def record_approved_payment(payment: dict) -> None:
     if payment.get("status") != "approved":
         return
@@ -78,21 +85,35 @@ def record_approved_payment(payment: dict) -> None:
         return
     with SUPPORT_DATA_LOCK:
         data = load_support_data()
-        data["payments"][payment_id] = str(amount)
+        data["payments"][payment_id] = {
+            "amount": str(amount),
+            "month": current_support_month(),
+        }
         save_support_data(data)
 
 
 def support_summary() -> dict:
+    month = current_support_month()
     with SUPPORT_DATA_LOCK:
         data = load_support_data()
         raised = sum(
-            (Decimal(str(value)) for value in data["payments"].values()),
+            (
+                Decimal(str(value.get("amount", "0")))
+                for value in data["payments"].values()
+                if isinstance(value, dict) and value.get("month") == month
+            ),
             Decimal("0.00"),
+        )
+        supporters = sum(
+            1
+            for value in data["payments"].values()
+            if isinstance(value, dict) and value.get("month") == month
         )
     return {
         "raised": float(raised),
         "goal": float(SUPPORT_GOAL),
-        "supporters": len(data["payments"]),
+        "supporters": supporters,
+        "month": month,
     }
 
 

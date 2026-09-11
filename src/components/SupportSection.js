@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
-import { Button, Card, Text, TextInput, useTheme } from 'react-native-paper';
+import { Image, Linking, StyleSheet, View } from 'react-native';
+import { Button, Card, ProgressBar, Text, TextInput, useTheme } from 'react-native-paper';
 import * as Clipboard from 'expo-clipboard';
 
 import { supportService } from '../services/supportService';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const WHATS_MEN_URL = 'https://whats.men';
+const PROJECT_URL = 'https://github.com/willf444/faz-agora';
 
 export default function SupportSection() {
   const theme = useTheme();
@@ -16,12 +18,29 @@ export default function SupportSection() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [summary, setSummary] = useState({ raised: 0, goal: 500 });
 
   const amount = choice === 'custom'
     ? Number(customAmount.replace(',', '.'))
     : choice;
   const validAmount = Number.isFinite(amount) && amount >= 1 && amount <= 1000;
   const validEmail = EMAIL_PATTERN.test(email.trim());
+
+  const loadSummary = async () => {
+    try {
+      const result = await supportService.getSummary();
+      setSummary({
+        raised: Math.max(0, Number(result.raised) || 0),
+        goal: Math.max(1, Number(result.goal) || 500),
+      });
+    } catch (_) {
+      // A meta continua visível mesmo quando o servidor estiver indisponível.
+    }
+  };
+
+  useEffect(() => {
+    loadSummary();
+  }, []);
 
   useEffect(() => {
     if (!payment || payment.status === 'approved') return undefined;
@@ -31,6 +50,7 @@ export default function SupportSection() {
         const result = await supportService.getStatus(payment.id, payment.statusKey);
         if (result.status === 'approved') {
           setPayment(current => ({ ...current, status: 'approved' }));
+          loadSummary();
         }
       } catch (_) {
         // A próxima verificação tenta novamente sem interromper o usuário.
@@ -68,12 +88,34 @@ export default function SupportSection() {
   return (
     <Card style={styles.card}>
       <Card.Content>
-        <Text variant="titleMedium" style={styles.title}>Este aplicativo está sendo útil para você?</Text>
+        <Text variant="titleMedium" style={styles.title}>Sobre o Faz agora!</Text>
         <Text variant="bodySmall" style={styles.description}>
-          Ele é gratuito, sem anúncios, sem rastreamento e sem venda de dados. Suas tarefas ficam no seu aparelho ou no servidor WebDAV escolhido por você.
+          Este projeto é de um desenvolvedor independente e precisa da sua colaboração. Todo o código está disponível gratuitamente. Sem anúncio e sem rastreio, sua privacidade é preservada.
         </Text>
+        <Text variant="bodySmall" style={styles.projectLink}>
+          Link aberto do projeto:{' '}
+          <Text style={styles.link} onPress={() => Linking.openURL(PROJECT_URL)}>
+            github.com/willf444/faz-agora
+          </Text>
+        </Text>
+        <Text variant="bodySmall" style={styles.developer}>Desenvolvedor: Willian Ferreira</Text>
+        <Text variant="bodyMedium" style={styles.relatedTitle}>Conheça também whats.men</Text>
+        <Text variant="bodySmall" style={styles.description}>
+          Um link inteligente para o seu negócio. Um projeto para divulgar redes sociais e contatos.
+        </Text>
+        <Button mode="outlined" icon="open-in-new" onPress={() => Linking.openURL(WHATS_MEN_URL)} style={styles.relatedButton}>
+          Conhecer o whats.men
+        </Button>
         <Text variant="bodyMedium" style={styles.invitation}>
-          Considere apoiar o projeto e ajudar a mantê-lo vivo.
+          Considere fazer uma doação.
+        </Text>
+
+        <Text variant="labelLarge" style={styles.goalLabel}>
+          Meta mensal: R$ {summary.raised.toFixed(2).replace('.', ',')} de R$ {summary.goal.toFixed(2).replace('.', ',')}
+        </Text>
+        <ProgressBar progress={Math.min(summary.raised / summary.goal, 1)} style={styles.progress} />
+        <Text variant="bodySmall" style={styles.costs}>
+          VPS: R$ 50,00{`\n`}Domínio: R$ 5,00{`\n`}IA: R$ 100,00{`\n`}Luz: R$ 20,00{`\n`}Café pro dev :D — R$ 325,00
         </Text>
 
         <View style={styles.amountRow}>
@@ -155,7 +197,15 @@ const styles = StyleSheet.create({
   },
   title: { fontWeight: '700', marginBottom: 5 },
   description: { color: '#a3a3a3', lineHeight: 18 },
+  projectLink: { color: '#a3a3a3', marginTop: 8 },
+  link: { color: '#d4d4d4', textDecorationLine: 'underline' },
+  developer: { color: '#a3a3a3', marginTop: 4 },
+  relatedTitle: { fontWeight: '700', marginTop: 14, marginBottom: 4 },
+  relatedButton: { marginTop: 10 },
   invitation: { marginTop: 9, marginBottom: 14 },
+  goalLabel: { marginBottom: 7 },
+  progress: { height: 8, borderRadius: 4, marginBottom: 8 },
+  costs: { color: '#a3a3a3', lineHeight: 18, marginBottom: 14 },
   amountRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   amountButton: { flex: 1 },
   input: { backgroundColor: '#151515', marginBottom: 7 },
