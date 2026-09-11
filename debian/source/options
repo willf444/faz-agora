@@ -1,0 +1,1 @@
+extend-diff-ignore = "(^|/)(node_modules|\.expo|\.flatpak-builder|dist|backups|credentials|android/\.gradle|android/.*/build)(/|$)|(^|/).*\.(apk|aab|jks|keystore|pyc)$|(^|/)credentials\.json$|(^|/)retomar.*\.txt$|(^|/)Gemini_Generated_Image_.*\.jpeg$|(^|/)willdo-(backup-.*|markdown-backup)\.py$"

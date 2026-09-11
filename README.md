@@ -4,6 +4,12 @@ Gerenciador de tarefas livre, sem anúncios e sem rastreamento, disponível para
 
 O Faz agora! funciona offline e pode sincronizar tarefas entre dispositivos por meio de um servidor WebDAV escolhido pelo usuário. Os aplicativos Android e Linux utilizam o mesmo arquivo `task.json`.
 
+## Disponibilidade
+
+- Android: submissão ao F-Droid em preparação.
+- Linux: submissão ao Flathub e ao repositório Debian em preparação.
+- Código-fonte e versões diretas: publicados neste repositório.
+
 ## Recursos
 
 - Tarefas rápidas ou com data e hora.
