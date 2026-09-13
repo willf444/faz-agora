@@ -2,6 +2,10 @@ Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: faz-agora
 Upstream-Contact: Willian Ferreira <adm@whats.men>
 Source: https://github.com/willf444/faz-agora
+Files-Excluded:
+ android/gradle/wrapper/gradle-wrapper.jar
+ debian
+ willdo-markdown-backup.py
 
 Files: *
 Copyright: 2026 Willian Ferreira
