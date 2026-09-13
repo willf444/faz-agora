@@ -13,6 +13,7 @@
     <name>Willian Ferreira</name>
   </developer>
   <launchable type="desktop-id">men.whats.FazAgora.desktop</launchable>
+  <icon type="stock">men.whats.FazAgora</icon>
   <provides>
     <binary>faz-agora</binary>
   </provides>

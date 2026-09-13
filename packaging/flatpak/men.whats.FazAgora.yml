@@ -31,7 +31,7 @@ modules:
       - install -Dm644 faz-agora.py /app/share/faz-agora/faz-agora.py
       - install -Dm644 assets/icon.png /app/share/faz-agora/assets/icon.png
       - install -Dm644 assets/check-white.svg /app/share/faz-agora/assets/check-white.svg
-      - install -Dm644 assets/icon.png /app/share/icons/hicolor/1024x1024/apps/men.whats.FazAgora.png
+      - install -Dm644 packaging/linux/men.whats.FazAgora.png /app/share/icons/hicolor/512x512/apps/men.whats.FazAgora.png
       - install -Dm644 packaging/linux/men.whats.FazAgora.desktop /app/share/applications/men.whats.FazAgora.desktop
       - install -Dm644 packaging/linux/men.whats.FazAgora.metainfo.xml /app/share/metainfo/men.whats.FazAgora.metainfo.xml
     sources:
