@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0b">
+  <meta name="color-scheme" content="dark">
+  <title>Apoie o Faz agora!</title>
+  <style>
+    :root {
+      --background: #0b0b0b;
+      --surface: #151515;
+      --surface-raised: #1d1d1d;
+      --border: #292929;
+      --text: #f5f5f5;
+      --muted: #a3a3a3;
+      --green: #22c55e;
+      --green-dark: #15803d;
+      --success-bg: #12301d;
+      --error: #fca5a5;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--background);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    main {
+      width: min(100% - 32px, 620px);
+      margin: 0 auto;
+      padding: max(28px, env(safe-area-inset-top)) 0 max(32px, env(safe-area-inset-bottom));
+    }
+
+    .brand { margin-bottom: 18px; }
+    .brand h1 { margin: 0; font-size: clamp(1.8rem, 8vw, 2.45rem); line-height: 1.1; }
+    .brand p { margin: 5px 0 0; color: var(--muted); }
+
+    .card {
+      padding: clamp(18px, 5vw, 28px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 16px 48px rgb(0 0 0 / 28%);
+    }
+
+    h2 { margin: 0 0 6px; font-size: 1.22rem; }
+    p { margin: 0 0 14px; }
+    .muted { color: var(--muted); }
+    .goal { margin-top: 22px; font-weight: 700; }
+    progress { width: 100%; height: 9px; border: 0; border-radius: 5px; overflow: hidden; background: #303030; }
+    progress::-webkit-progress-bar { background: #303030; }
+    progress::-webkit-progress-value { background: var(--green); }
+    progress::-moz-progress-bar { background: var(--green); }
+    .costs { margin-top: 9px; white-space: pre-line; font-size: .9rem; }
+
+    .amounts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 20px 0 14px; }
+    button, input { min-height: 46px; border-radius: 9px; font: inherit; }
+    button {
+      border: 1px solid #555;
+      background: transparent;
+      color: var(--text);
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover, button:focus-visible { border-color: var(--green); outline: none; }
+    button.selected, button.primary { background: var(--green-dark); border-color: var(--green); }
+    button.primary { width: 100%; }
+    button:disabled { cursor: not-allowed; opacity: .5; }
+
+    label { display: block; margin: 12px 0 5px; font-size: .92rem; font-weight: 650; }
+    input {
+      width: 100%;
+      border: 1px solid #4a4a4a;
+      background: var(--surface-raised);
+      color: var(--text);
+      padding: 10px 12px;
+      outline: none;
+    }
+    input:focus { border-color: var(--green); box-shadow: 0 0 0 2px rgb(34 197 94 / 18%); }
+    .hint { margin: 5px 0 14px; color: var(--muted); font-size: .82rem; }
+    .hidden { display: none !important; }
+    .error { margin-top: 12px; color: var(--error); }
+
+    .payment { margin-top: 20px; text-align: center; }
+    .qr-frame {
+      width: min(100%, 246px);
+      aspect-ratio: 1;
+      margin: 0 auto 10px;
+      padding: 12px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      border-radius: 8px;
+    }
+    .qr-frame img { display: block; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+    .pix-code { width: 100%; min-height: 84px; margin: 8px 0 10px; resize: vertical; }
+    .success { margin-top: 18px; padding: 16px; color: #86efac; background: var(--success-bg); border-radius: 10px; }
+    footer { padding-top: 18px; text-align: center; color: var(--muted); font-size: .82rem; }
+
+    @media (max-width: 390px) {
+      main { width: min(100% - 20px, 620px); }
+      .card { padding: 16px; }
+      .amounts { gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <h1>Faz agora!</h1>
+      <p>Um projeto independente, livre e sem anúncios.</p>
+    </header>
+
+    <section class="card" aria-labelledby="support-title">
+      <h2 id="support-title">Apoie o projeto</h2>
+      <p class="muted">Sua contribuição ajuda a manter o servidor, o domínio, as ferramentas e o desenvolvimento do Faz agora!.</p>
+
+      <div class="goal" id="goal-label">Meta mensal: carregando...</div>
+      <progress id="goal-progress" value="0" max="500" aria-labelledby="goal-label"></progress>
+      <p class="costs muted">VPS: R$ 50,00
+Domínio: R$ 5,00
+IA: R$ 100,00
+Luz: R$ 20,00
+Café pro dev :D — R$ 325,00</p>
+
+      <div class="amounts" aria-label="Escolha o valor">
+        <button type="button" data-amount="10">R$ 10</button>
+        <button type="button" data-amount="50">R$ 50</button>
+        <button type="button" data-amount="custom">Livre</button>
+      </div>
+
+      <div id="custom-group" class="hidden">
+        <label for="amount">Valor do apoio</label>
+        <input id="amount" inputmode="decimal" autocomplete="off" placeholder="R$ 10,00">
+      </div>
+
+      <label for="email">Seu e-mail</label>
+      <input id="email" type="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="voce@exemplo.com">
+      <p class="hint">O Mercado Pago exige um e-mail para gerar o Pix.</p>
+
+      <button id="generate" class="primary" type="button" disabled>Gerar Pix</button>
+      <p id="error" class="error hidden" role="alert"></p>
+
+      <div id="payment" class="payment hidden" aria-live="polite">
+        <div id="qr-frame" class="qr-frame hidden"><img id="qr" alt="QR Code Pix"></div>
+        <p id="status" class="muted">Aguardando o pagamento...</p>
+        <textarea id="pix-code" class="pix-code" readonly aria-label="Código Pix copia e cola"></textarea>
+        <button id="copy" class="primary" type="button">Copiar código Pix</button>
+      </div>
+
+      <div id="success" class="success hidden" role="status">
+        <strong>Obrigado pelo seu apoio!</strong><br>
+        Sua contribuição ajuda a manter este projeto.
+      </div>
+    </section>
+
+    <footer>Desenvolvido por Willian Ferreira.</footer>
+  </main>
+
+  <script>
+    const state = { choice: null, paymentId: '', statusKey: '', timer: null };
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const byId = id => document.getElementById(id);
+    const amountInput = byId('amount');
+    const emailInput = byId('email');
+    const generateButton = byId('generate');
+
+    const brl = value => Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const selectedAmount = () => state.choice === 'custom'
+      ? Number(amountInput.value.trim().replace(',', '.'))
+      : state.choice;
+
+    function updateButton() {
+      const amount = selectedAmount();
+      generateButton.disabled = !(Number.isFinite(amount) && amount >= 1 && amount <= 1000 && emailPattern.test(emailInput.value.trim()));
+    }
+
+    document.querySelectorAll('[data-amount]').forEach(button => {
+      button.addEventListener('click', () => {
+        state.choice = button.dataset.amount === 'custom' ? 'custom' : Number(button.dataset.amount);
+        document.querySelectorAll('[data-amount]').forEach(item => item.classList.toggle('selected', item === button));
+        byId('custom-group').classList.toggle('hidden', state.choice !== 'custom');
+        byId('payment').classList.add('hidden');
+        byId('success').classList.add('hidden');
+        byId('error').classList.add('hidden');
+        if (state.timer) clearInterval(state.timer);
+        updateButton();
+      });
+    });
+
+    amountInput.addEventListener('input', updateButton);
+    emailInput.addEventListener('input', updateButton);
+
+    async function loadSummary() {
+      try {
+        const response = await fetch('/support', { cache: 'no-store' });
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        const raised = Math.max(0, Number(data.raised) || 0);
+        const goal = Math.max(1, Number(data.goal) || 500);
+        byId('goal-label').textContent = `Meta mensal: ${brl(raised)} de ${brl(goal)}`;
+        byId('goal-progress').max = goal;
+        byId('goal-progress').value = Math.min(raised, goal);
+      } catch (_) {
+        byId('goal-label').textContent = 'Meta mensal: R$ 0,00 de R$ 500,00';
+      }
+    }
+
+    async function checkPayment() {
+      try {
+        const response = await fetch(`/pix/${encodeURIComponent(state.paymentId)}?key=${encodeURIComponent(state.statusKey)}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.status === 'approved') {
+          clearInterval(state.timer);
+          state.timer = null;
+          byId('payment').classList.add('hidden');
+          byId('success').classList.remove('hidden');
+          loadSummary();
+        }
+      } catch (_) {}
+    }
+
+    generateButton.addEventListener('click', async () => {
+      generateButton.disabled = true;
+      generateButton.textContent = 'Gerando Pix...';
+      byId('error').classList.add('hidden');
+      try {
+        const response = await fetch('/pix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: selectedAmount(), email: emailInput.value.trim() })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Não foi possível gerar o Pix.');
+        state.paymentId = String(data.id);
+        state.statusKey = String(data.statusKey);
+        byId('pix-code').value = data.qrCode || '';
+        if (data.qrCodeBase64) {
+          byId('qr').src = `data:image/png;base64,${data.qrCodeBase64}`;
+          byId('qr-frame').classList.remove('hidden');
+        } else {
+          byId('qr-frame').classList.add('hidden');
+        }
+        byId('payment').classList.remove('hidden');
+        byId('success').classList.add('hidden');
+        byId('payment').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (state.timer) clearInterval(state.timer);
+        state.timer = setInterval(checkPayment, 8000);
+      } catch (error) {
+        byId('error').textContent = error.message || 'Não foi possível conectar ao serviço de apoio.';
+        byId('error').classList.remove('hidden');
+      } finally {
+        generateButton.textContent = 'Gerar Pix';
+        updateButton();
+      }
+    });
+
+    byId('copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(byId('pix-code').value);
+      } catch (_) {
+        byId('pix-code').select();
+        document.execCommand('copy');
+      }
+      byId('copy').textContent = 'Código copiado';
+    });
+
+    loadSummary();
+  </script>
+</body>
+</html>

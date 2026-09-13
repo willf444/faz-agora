@@ -27,8 +27,18 @@
   </keywords>
   <url type="homepage">https://github.com/willf444/faz-agora</url>
   <url type="bugtracker">https://github.com/willf444/faz-agora/issues</url>
+  <url type="donation">https://faz.whats.men/apoie</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.3.11" date="2026-09-13">
+      <description>
+        <ul>
+          <li>Formatação de texto preservada entre Android e Linux.</li>
+          <li>Sincronização WebDAV e notificações alinhadas entre dispositivos.</li>
+          <li>Datas relativas e identificação visual de tarefas vencidas.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.3.0" date="2026-09-11">
       <description>
         <p>Primeira versão pública para Android e Linux.</p>

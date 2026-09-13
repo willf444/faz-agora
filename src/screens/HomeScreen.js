@@ -20,16 +20,26 @@ import {
   Divider,
   Button,
 } from 'react-native-paper';
-import ExactMarkdown from '../components/ExactMarkdown';
-import { format, isPast, isToday } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import RichDocumentView from '../components/RichDocumentView';
+import { isPast, isToday } from 'date-fns';
 import * as Crypto from 'expo-crypto';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { storageService } from '../services/storageService';
 import { notificationService } from '../services/notificationService';
 import { webDavService } from '../services/webDavService';
 import { calculateNextDue } from '../utils/recurrence';
-import { normalizeMarkdownFormatting } from '../utils/richText';
+import { formatTaskDue } from '../utils/dateDisplay';
+import {
+  startForegroundSync,
+  shouldRescheduleAfterSync,
+  SYNC_SUCCESS_MESSAGE,
+} from '../utils/foregroundSync';
+import {
+  markdownToRichDocument,
+  normalizeRichDocument,
+  richDocumentToMarkdown,
+} from '../utils/richDocument';
 
 export default function HomeScreen({ navigation }) {
   const [tasks, setTasks] = useState([]);
@@ -41,7 +51,7 @@ export default function HomeScreen({ navigation }) {
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasSuccessfulSync, setHasSuccessfulSync] = useState(false);
-  const syncingRef = useRef(false);
+  const syncPromiseRef = useRef(null);
   const theme = useTheme();
 
   const loadTasks = useCallback(async () => {
@@ -50,38 +60,54 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   const syncWebDav = useCallback(async (silent = false) => {
-    if (syncingRef.current) return;
-    const configured = await webDavService.isConfigured();
-    if (!configured) {
-      if (!silent) navigation.navigate('WebDavSettings');
-      return;
-    }
-
-    syncingRef.current = true;
-    setIsSyncing(true);
-    setHasSuccessfulSync(false);
     try {
-      const result = await webDavService.sync();
-      const syncedTasks = result.changed
-        ? await notificationService.rescheduleTasks(result.tasks)
-        : result.tasks;
-      setTasks(syncedTasks);
-      setHasSuccessfulSync(true);
-      if (!silent) {
-        Alert.alert(
-          'WebDAV sincronizado',
-          result.uploaded || result.changed
-            ? 'As alterações locais e remotas foram mescladas.'
-            : 'As tarefas já estavam atualizadas.'
-        );
+      if (!silent) setIsSyncing(true);
+
+      const activeSync = syncPromiseRef.current;
+      if (activeSync) {
+        if (silent) return await activeSync;
+        try {
+          await activeSync;
+        } catch (_error) {
+          // O toque manual ainda fará uma nova tentativa logo abaixo.
+        }
       }
-    } catch (error) {
-      setHasSuccessfulSync(false);
-      if (!silent) Alert.alert('Falha no WebDAV', error.message);
-      else console.warn('Falha na sincronização automática WebDAV:', error);
+
+      const operation = (async () => {
+        const configured = await webDavService.isConfigured();
+        if (!configured) {
+          if (!silent) navigation.navigate('WebDavSettings');
+          return null;
+        }
+
+        try {
+          const result = await webDavService.sync();
+          const syncedTasks = shouldRescheduleAfterSync(result, silent)
+            ? await notificationService.rescheduleTasks(result.tasks)
+            : result.tasks;
+          setTasks(syncedTasks);
+          setHasSuccessfulSync(true);
+          if (!silent) Alert.alert('WebDAV sincronizado', SYNC_SUCCESS_MESSAGE);
+          return result;
+        } catch (error) {
+          if (!silent) {
+            setHasSuccessfulSync(false);
+            Alert.alert('Falha no WebDAV', error.message);
+          } else {
+            console.warn('Falha na sincronização automática WebDAV:', error);
+          }
+          return null;
+        }
+      })();
+
+      syncPromiseRef.current = operation;
+      try {
+        return await operation;
+      } finally {
+        if (syncPromiseRef.current === operation) syncPromiseRef.current = null;
+      }
     } finally {
-      syncingRef.current = false;
-      setIsSyncing(false);
+      if (!silent) setIsSyncing(false);
     }
   }, [navigation]);
 
@@ -184,14 +210,21 @@ export default function HomeScreen({ navigation }) {
     });
   }, [hasSuccessfulSync, isSyncing, navigation, showQuickAdd, showSearch, syncWebDav, toggleQuickAdd, toggleSearch]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', async () => {
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    void (async () => {
       await loadTasks();
-      setHasSuccessfulSync(await webDavService.hasSuccessfulSync());
-      await autoSyncWebDav();
-    });
-    return unsubscribe;
-  }, [navigation, loadTasks, autoSyncWebDav]);
+      const previousSyncSucceeded = await webDavService.hasSuccessfulSync();
+      if (active) setHasSuccessfulSync(previousSyncSucceeded);
+      if (active) await autoSyncWebDav();
+    })();
+
+    const syncTimer = startForegroundSync(autoSyncWebDav);
+    return () => {
+      active = false;
+      clearInterval(syncTimer);
+    };
+  }, [loadTasks, autoSyncWebDav]));
 
   // Criação rápida sem data (equivalente ao quick_add de willdo.py)
   const handleQuickAdd = async () => {
@@ -205,6 +238,7 @@ export default function HomeScreen({ navigation }) {
       due_at: '',
       recurrence: 'Sem recorrência',
       details_md: '',
+      details_doc: markdownToRichDocument(''),
       completed: false,
       completed_at: null,
       reminded_at: null,
@@ -369,8 +403,13 @@ export default function HomeScreen({ navigation }) {
     const q = searchQuery.toLowerCase().trim();
     let matchesSearch = true;
     if (q) {
-      const subtaskTitles = (task.subtasks || []).map(s => s.title.toLowerCase()).join(' ');
-      const haystack = `${task.title.toLowerCase()} ${(task.details_md || '').toLowerCase()} ${(task.recurrence || '').toLowerCase()} ${subtaskTitles}`;
+      const taskDetails = richDocumentToMarkdown(
+        normalizeRichDocument(task.details_doc, task.details_md)
+      );
+      const subtaskTitles = (task.subtasks || []).map(s => richDocumentToMarkdown(
+        normalizeRichDocument(s.content_doc, s.title)
+      ).toLowerCase()).join(' ');
+      const haystack = `${task.title.toLowerCase()} ${taskDetails.toLowerCase()} ${(task.recurrence || '').toLowerCase()} ${subtaskTitles}`;
       matchesSearch = haystack.includes(q);
     }
 
@@ -383,7 +422,9 @@ export default function HomeScreen({ navigation }) {
 
   const renderTaskItem = ({ item }) => {
     const isExpanded = expandedTaskId === item.id;
-    const hasDetails = Boolean(item.details_md && item.details_md.trim());
+    const hasDetails = Boolean(richDocumentToMarkdown(
+      normalizeRichDocument(item.details_doc, item.details_md)
+    ).trim());
     const hasSubtasks = item.subtasks && item.subtasks.length > 0;
     const completedSubtasks = hasSubtasks
       ? item.subtasks.filter(s => s.completed).length
@@ -394,7 +435,7 @@ export default function HomeScreen({ navigation }) {
     if (item.due_at) {
       try {
         const d = new Date(item.due_at);
-        dueFormatted = format(d, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+        dueFormatted = formatTaskDue(d);
         if (!item.completed) {
           if (isPast(d) && !isToday(d)) {
             dueColor = theme.colors.error;
@@ -516,9 +557,9 @@ export default function HomeScreen({ navigation }) {
                     <Text variant="labelMedium" style={styles.sectionLabel}>
                       DETALHES:
                     </Text>
-                    <ExactMarkdown style={markdownStyles}>
-                      {normalizeMarkdownFormatting(item.details_md)}
-                    </ExactMarkdown>
+                    <RichDocumentView
+                      document={normalizeRichDocument(item.details_doc, item.details_md)}
+                    />
                   </View>
                 )}
 
@@ -539,9 +580,11 @@ export default function HomeScreen({ navigation }) {
                           color={theme.colors.primary}
                         />
                         <View style={styles.subtaskMarkdownContainer}>
-                          <ExactMarkdown style={s.completed ? completedSubtaskMarkdownStyles : subtaskMarkdownStyles}>
-                            {normalizeMarkdownFormatting(s.title)}
-                          </ExactMarkdown>
+                          <RichDocumentView
+                            document={normalizeRichDocument(s.content_doc, s.title)}
+                            completed={s.completed}
+                            color={s.completed ? '#737373' : '#e5e5e5'}
+                          />
                         </View>
                       </TouchableOpacity>
                     ))}

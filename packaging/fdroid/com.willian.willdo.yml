@@ -8,6 +8,7 @@ AuthorEmail: adm@whats.men
 WebSite: https://github.com/willf444/faz-agora
 SourceCode: https://github.com/willf444/faz-agora
 IssueTracker: https://github.com/willf444/faz-agora/issues
+Donate: https://faz.whats.men/apoie
 
 AutoName: Faz agora!
 Description: |-
@@ -21,9 +22,9 @@ RepoType: git
 Repo: https://github.com/willf444/faz-agora.git
 
 Builds:
-  - versionName: 2.3.0
-    versionCode: 20
-    commit: v2.3.0
+  - versionName: 2.3.11
+    versionCode: 31
+    commit: v2.3.11
     subdir: android/app
     sudo:
       - apt-get update
@@ -38,5 +39,5 @@ Builds:
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 2.3.0
-CurrentVersionCode: 20
+CurrentVersion: 2.3.11
+CurrentVersionCode: 31

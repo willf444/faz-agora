@@ -88,6 +88,9 @@ export const notificationService = {
   },
 
   async rescheduleTasks(tasks) {
+    const granted = await this.requestPermissions();
+    if (!granted) return tasks;
+
     await this.cancelAllNotifications();
     const refreshedTasks = [];
 
@@ -100,5 +103,10 @@ export const notificationService = {
     }
 
     return await storageService.saveTasks(refreshedTasks);
-  }
+  },
+
+  async restoreScheduledTasks() {
+    const tasks = await storageService.getTasks();
+    return await this.rescheduleTasks(tasks);
+  },
 };

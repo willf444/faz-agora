@@ -27,7 +27,7 @@ const navigationTheme = {
 
 export default function App() {
   useEffect(() => {
-    notificationService.requestPermissions();
+    void notificationService.restoreScheduledTasks();
   }, []);
 
   return (

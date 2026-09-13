@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 import { storageService } from './storageService';
+import { normalizeRichDocument, richDocumentToMarkdown } from '../utils/richDocument';
 
 const CONFIG_KEY = '@willdo_webdav_config';
 const PASSWORD_KEY = 'willdo_webdav_password';
@@ -18,6 +19,10 @@ function normalizeWebDavServerUrl(value) {
 
 function taskFileUrl(serverUrl) {
   return `${normalizeWebDavServerUrl(serverUrl)}/task.json`;
+}
+
+function freshTaskFileUrl(serverUrl, requestId = Date.now()) {
+  return `${taskFileUrl(serverUrl)}?_willdo_sync=${requestId}`;
 }
 
 function encodeBasicAuth(username, password) {
@@ -50,6 +55,11 @@ function taskWithoutLocalFields(task) {
   };
 }
 
+function taskForComparison(task) {
+  const { notificationId, reminded_at, ...sharedTask } = task;
+  return sharedTask;
+}
+
 function stableValue(value) {
   if (Array.isArray(value)) return value.map(stableValue);
   if (value && typeof value === 'object') {
@@ -64,13 +74,13 @@ function stableValue(value) {
 }
 
 function taskFingerprint(task) {
-  return JSON.stringify(stableValue(taskWithoutLocalFields(task)));
+  return JSON.stringify(stableValue(taskForComparison(task)));
 }
 
 function tasksFingerprint(tasks) {
   return JSON.stringify(
     [...tasks]
-      .map(taskWithoutLocalFields)
+      .map(taskForComparison)
       .sort((a, b) => String(a.id).localeCompare(String(b.id)))
       .map(stableValue)
   );
@@ -98,25 +108,33 @@ function normalizeDate(value) {
 
 function normalizeRemoteTask(task) {
   if (!task || typeof task !== 'object' || !task.id || !task.title) return null;
+  const detailsFallback = task.details_md || task.details_html || task.details || '';
+  const detailsDocument = normalizeRichDocument(task.details_doc, detailsFallback);
   return {
     id: String(task.id),
     title: String(task.title),
     due_at: normalizeDate(task.due_at),
     recurrence: task.recurrence || 'Sem recorrência',
-    details_md: task.details_md || task.details_html || task.details || '',
+    details_md: richDocumentToMarkdown(detailsDocument),
+    details_doc: detailsDocument,
     completed: Boolean(task.completed),
     completed_at: normalizeDate(task.completed_at),
     reminded_at: normalizeDate(task.reminded_at),
     created_at: normalizeDate(task.created_at),
     updated_at: normalizeDate(task.updated_at),
+    notificationId: task.notificationId || null,
     subtasks: Array.isArray(task.subtasks)
       ? task.subtasks
         .filter(subtask => subtask && subtask.id && subtask.title)
-        .map(subtask => ({
-          id: String(subtask.id),
-          title: String(subtask.title),
-          completed: Boolean(subtask.completed),
-        }))
+        .map(subtask => {
+          const contentDocument = normalizeRichDocument(subtask.content_doc, subtask.title);
+          return {
+            id: String(subtask.id),
+            title: richDocumentToMarkdown(contentDocument),
+            content_doc: contentDocument,
+            completed: Boolean(subtask.completed),
+          };
+        })
       : [],
   };
 }
@@ -255,7 +273,15 @@ export const webDavService = {
       Accept: 'application/json',
     };
     const remoteTaskUrl = taskFileUrl(config.url);
-    const response = await request(remoteTaskUrl, { method: 'GET', headers });
+    const response = await request(freshTaskFileUrl(config.url), {
+      method: 'GET',
+      headers: {
+        ...headers,
+        'Cache-Control': 'no-cache, no-store',
+        Pragma: 'no-cache',
+      },
+      cache: 'no-store',
+    });
     let remoteTasks = [];
     let etag = null;
 
@@ -270,7 +296,9 @@ export const webDavService = {
       etag = response.headers.get('etag');
     }
 
-    const localTasks = await storageService.getTasks();
+    const localTasks = (await storageService.getTasks())
+      .map(normalizeRemoteTask)
+      .filter(Boolean);
     const storedBaseline = await AsyncStorage.getItem(BASELINE_KEY);
     let baselineTasks = [];
     try {
@@ -315,8 +343,11 @@ export const webDavService = {
 
 export const webDavInternals = {
   mergeTasks,
+  freshTaskFileUrl,
   normalizeRemoteTask,
   normalizeWebDavServerUrl,
   taskFileUrl,
+  taskForComparison,
   taskWithoutLocalFields,
+  tasksFingerprint,
 };

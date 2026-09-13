@@ -1,0 +1,38 @@
+[
+  {
+    "version": 1,
+    "blocks": [
+      {"type": "paragraph", "runs": [{"text": "Linha 1"}]},
+      {"type": "blank", "runs": []},
+      {"type": "blank", "runs": []},
+      {"type": "paragraph", "runs": [{"text": "Linha 2"}]}
+    ]
+  },
+  {
+    "version": 1,
+    "blocks": [
+      {"type": "heading1", "runs": [{"text": "Título H1"}]},
+      {"type": "heading2", "runs": [{"text": "Título H2", "italic": true}]},
+      {"type": "paragraph", "runs": [{"text": "Texto normal"}]},
+      {"type": "list_item", "runs": [{"text": "Lista "}, {"text": "forte", "bold": true}]},
+      {"type": "list_item", "runs": [{"text": "Lista 2"}]},
+      {"type": "paragraph", "runs": [{"text": "Fora da lista"}]}
+    ]
+  },
+  {
+    "version": 1,
+    "blocks": [
+      {
+        "type": "paragraph",
+        "runs": [
+          {"text": "Texto literal: # título, - item, **asteriscos** e [colchetes]. "},
+          {"text": "negrito", "bold": true},
+          {"text": ", "},
+          {"text": "itálico", "italic": true},
+          {"text": " e "},
+          {"text": "link", "link": "https://example.com/a?x=1&y=2"}
+        ]
+      }
+    ]
+  }
+]

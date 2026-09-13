@@ -1,12 +1,16 @@
 {
   "name": "willdo-mobile",
-  "version": "2.3.4",
+  "version": "2.3.11",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "test:rich-text": "node tests/test-rich-document-js.cjs && QT_QPA_PLATFORM=offscreen python3 tests/test_rich_document.py",
+    "test:notifications": "node tests/test-notifications-js.cjs && QT_QPA_PLATFORM=offscreen python3 tests/test_notifications.py",
+    "test:dates": "node tests/test-date-display-js.cjs && QT_QPA_PLATFORM=offscreen python3 tests/test_due_colors.py",
+    "test:foreground-sync": "node tests/test-foreground-sync-js.cjs",
     "build:apk": "bash scripts/build-android-local.sh apk",
     "build:aab": "bash scripts/build-android-local.sh aab",
     "build:deb": "bash scripts/build-deb.sh"

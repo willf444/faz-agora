@@ -1,0 +1,9 @@
+[
+  "Linha 1\nLinha 2",
+  "Linha 1\n\nLinha 2",
+  "Linha 1\n\n\nLinha 2",
+  "# Título H1\n## Título H2\nTexto normal",
+  "- Lista 1\n- Lista 2\nTexto fora da lista",
+  "**negrito** e *itálico* e [link](https://example.com)",
+  "# **Título forte**\n\n- *Item*\nLinha final"
+]

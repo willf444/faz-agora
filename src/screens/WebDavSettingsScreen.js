@@ -5,6 +5,7 @@ import { Button, Card, Switch, Text, TextInput, useTheme } from 'react-native-pa
 import { notificationService } from '../services/notificationService';
 import { webDavService } from '../services/webDavService';
 import SupportSection from '../components/SupportSection';
+import { SYNC_SUCCESS_MESSAGE } from '../utils/foregroundSync';
 
 export default function WebDavSettingsScreen({ navigation }) {
   const theme = useTheme();
@@ -34,7 +35,7 @@ export default function WebDavSettingsScreen({ navigation }) {
       setPassword('');
       Alert.alert(
         'Sincronização concluída',
-        result.uploaded ? 'As tarefas locais e remotas foram mescladas.' : 'As tarefas já estavam atualizadas.',
+        SYNC_SUCCESS_MESSAGE,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error) {

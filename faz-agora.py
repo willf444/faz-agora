@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from PyQt6.QtCore import Qt, QDateTime, QTimer, QLocale, QSize, QPoint, QPointF, QRectF, QEvent, QUrl, QByteArray, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QIcon, QPainter, QPen, QPixmap, QTextCharFormat, QTextCursor, QTextDocument, QTextListFormat
+from PyQt6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QIcon, QPainter, QPen, QPixmap, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument, QTextListFormat
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PyQt6.QtWidgets import (
     QApplication,
@@ -60,6 +60,8 @@ WHATS_MEN_URL = "https://whats.men"
 PROJECT_URL = "https://github.com/willf444/faz-agora"
 DATE_FMT = "%d/%m/%Y %H:%M"
 DISPLAY_DATE_FMT = "dd/MM/yyyy HH:mm"
+REMINDER_CHECK_INTERVAL_MS = 1000
+REMINDER_TIMER_TYPE = Qt.TimerType.PreciseTimer
 
 RECURRENCE_OPTIONS = [
     "Sem recorrência",
@@ -363,6 +365,10 @@ def datetime_to_storage(value: datetime) -> str:
         value = value.astimezone()
     return value.isoformat(timespec="seconds")
 
+def datetime_at_minute(value: datetime) -> datetime:
+    """Remove a precisão que o seletor não mostra ao usuário."""
+    return value.replace(second=0, microsecond=0)
+
 def normalize_stored_datetime(value: str) -> str:
     parsed = parse_stored_datetime(value)
     return datetime_to_storage(parsed) if parsed else ""
@@ -475,6 +481,256 @@ def inline_md(text: str) -> str:
     s = re.sub(r"`(.+?)`", r"<code>\1</code>", s)
     return s
 
+RICH_BLOCK_TYPES = {"paragraph", "blank", "heading1", "heading2", "heading3", "list_item"}
+
+def inline_markdown_to_runs(text: str) -> list[dict]:
+    document = QTextDocument()
+    document.setHtml(f"<p>{inline_md(text)}</p>")
+    runs = []
+    block = document.begin()
+    iterator = block.begin()
+    while not iterator.atEnd():
+        fragment = iterator.fragment()
+        if fragment.isValid() and fragment.text():
+            char_format = fragment.charFormat()
+            run = {"text": fragment.text()}
+            if not run["text"]:
+                iterator += 1
+                continue
+            if char_format.fontWeight() >= QFont.Weight.Bold.value:
+                run["bold"] = True
+            if char_format.fontItalic():
+                run["italic"] = True
+            if char_format.isAnchor() and char_format.anchorHref():
+                run["link"] = char_format.anchorHref()
+            if runs and all(runs[-1].get(key) == run.get(key) for key in ("bold", "italic", "link")):
+                runs[-1]["text"] += run["text"]
+            else:
+                runs.append(run)
+        iterator += 1
+    return runs
+
+def markdown_to_rich_document(markdown: str) -> dict:
+    normalized = (markdown or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not normalized:
+        return {"version": 1, "blocks": []}
+    blocks = []
+    for line in normalized.split("\n"):
+        if line == "":
+            blocks.append({"type": "blank", "runs": []})
+            continue
+        heading = re.match(r"^(#{1,3})\s+(.*)$", line)
+        list_item = re.match(r"^[-*]\s+(.*)$", line)
+        if heading:
+            block_type = f"heading{len(heading.group(1))}"
+            content = heading.group(2)
+        elif list_item:
+            block_type = "list_item"
+            content = list_item.group(1)
+        else:
+            block_type = "paragraph"
+            content = line
+        runs = inline_markdown_to_runs(content)
+        if block_type.startswith("heading"):
+            for run in runs:
+                run.pop("bold", None)
+        blocks.append({"type": block_type, "runs": runs})
+    return {"version": 1, "blocks": blocks}
+
+def normalize_rich_document(document, fallback_markdown: str = "") -> dict:
+    if not isinstance(document, dict) or document.get("version") != 1 or not isinstance(document.get("blocks"), list):
+        return markdown_to_rich_document(fallback_markdown)
+    blocks = []
+    for raw_block in document["blocks"]:
+        if not isinstance(raw_block, dict):
+            continue
+        block_type = raw_block.get("type") if raw_block.get("type") in RICH_BLOCK_TYPES else "paragraph"
+        if block_type == "blank":
+            blocks.append({"type": "blank", "runs": []})
+            continue
+        runs = []
+        for raw_run in raw_block.get("runs", []):
+            if not isinstance(raw_run, dict) or not str(raw_run.get("text", "")):
+                continue
+            run = {"text": str(raw_run["text"])}
+            if raw_run.get("bold"):
+                run["bold"] = True
+            if raw_run.get("italic"):
+                run["italic"] = True
+            if isinstance(raw_run.get("link"), str) and raw_run["link"]:
+                run["link"] = raw_run["link"]
+            if runs and all(runs[-1].get(key) == run.get(key) for key in ("bold", "italic", "link")):
+                runs[-1]["text"] += run["text"]
+            else:
+                runs.append(run)
+        if block_type.startswith("heading"):
+            for run in runs:
+                run.pop("bold", None)
+        blocks.append({"type": block_type if runs else "blank", "runs": runs})
+    return {"version": 1, "blocks": blocks}
+
+def rich_document_to_markdown(document, fallback_markdown: str = "") -> str:
+    normalized = normalize_rich_document(document, fallback_markdown)
+    lines = []
+    for block in normalized["blocks"]:
+        if block["type"] == "blank":
+            lines.append("")
+            continue
+        parts = []
+        for run in block["runs"]:
+            text = run["text"]
+            if run.get("link"):
+                text = f"[{text}]({run['link']})"
+            if run.get("bold") and run.get("italic"):
+                text = f"***{text}***"
+            elif run.get("bold"):
+                text = f"**{text}**"
+            elif run.get("italic"):
+                text = f"*{text}*"
+            parts.append(text)
+        content = "".join(parts)
+        if block["type"] == "list_item":
+            content = f"- {content}"
+        elif block["type"].startswith("heading"):
+            content = f"{'#' * int(block['type'][-1])} {content}"
+        lines.append(content)
+    return "\n".join(lines)
+
+def rich_document_to_html(document, fallback_markdown: str = "") -> str:
+    normalized = normalize_rich_document(document, fallback_markdown)
+    output = []
+    list_open = False
+
+    def close_list() -> None:
+        nonlocal list_open
+        if list_open:
+            output.append("</ul>")
+            list_open = False
+
+    def run_html(run: dict) -> str:
+        value = html.escape(run["text"])
+        if run.get("link"):
+            value = f'<a href="{html.escape(run["link"], quote=True)}">{value}</a>'
+        if run.get("italic"):
+            value = f"<em>{value}</em>"
+        if run.get("bold"):
+            value = f"<strong>{value}</strong>"
+        return value
+
+    for block in normalized["blocks"]:
+        content = "".join(run_html(run) for run in block["runs"])
+        if block["type"] == "list_item":
+            if not list_open:
+                output.append("<ul>")
+                list_open = True
+            output.append(f"<li>{content}</li>")
+            continue
+        close_list()
+        if block["type"] == "blank":
+            # QTextDocument transforma <br> dentro de um parágrafo vazio em
+            # duas linhas visuais. NBSP mantém exatamente um bloco de altura.
+            output.append("<p>&nbsp;</p>")
+        elif block["type"].startswith("heading"):
+            level = int(block["type"][-1])
+            output.append(f"<h{level}>{content}</h{level}>")
+        else:
+            output.append(f"<p>{content}</p>")
+    close_list()
+    body = "".join(output)
+    return f"""
+    <html><head><style>
+      body {{ font-family:sans-serif; font-size:9pt; color:#e5e5e5; background:#101010; margin:0; padding:0; }}
+      h1,h2,h3,p {{ margin:0; }}
+      h1,h2,h3 {{ color:#fafafa; }}
+      ul {{ margin:0 0 0 18px; padding:0; }}
+      li {{ margin:0; }}
+      strong {{ font-weight:700; }} em {{ font-style:italic; }}
+      a {{ color:#86efac; text-decoration:none; }}
+    </style></head><body>{body}</body></html>
+    """
+
+def qtext_document_to_rich_document(document: QTextDocument) -> dict:
+    blocks = []
+    block = document.begin()
+    while block.isValid():
+        heading_level = block.blockFormat().headingLevel()
+        if block.textList() is not None:
+            block_type = "list_item"
+        elif heading_level in (1, 2, 3):
+            block_type = f"heading{heading_level}"
+        else:
+            block_type = "paragraph"
+
+        runs = []
+        remaining = len(block.text())
+        consumed = 0
+        iterator = block.begin()
+        while not iterator.atEnd() and consumed < remaining:
+            fragment = iterator.fragment()
+            if fragment.isValid():
+                raw_text = fragment.text()
+                text = raw_text[:max(0, min(len(raw_text), remaining - consumed))]
+                consumed += len(raw_text)
+                if text:
+                    char_format = fragment.charFormat()
+                    run = {"text": text}
+                    if block_type == "paragraph" or block_type == "list_item":
+                        if char_format.fontWeight() >= QFont.Weight.Bold.value:
+                            run["bold"] = True
+                    if char_format.fontItalic():
+                        run["italic"] = True
+                    if char_format.isAnchor() and char_format.anchorHref():
+                        run["link"] = char_format.anchorHref()
+                    if runs and all(runs[-1].get(key) == run.get(key) for key in ("bold", "italic", "link")):
+                        runs[-1]["text"] += run["text"]
+                    else:
+                        runs.append(run)
+            iterator += 1
+        blocks.append({"type": block_type, "runs": runs} if runs else {"type": "blank", "runs": []})
+        block = block.next()
+
+    if blocks and all(block["type"] == "blank" for block in blocks):
+        blocks = []
+    return normalize_rich_document({"version": 1, "blocks": blocks})
+
+def set_text_edit_rich_document(editor: QTextEdit, document, fallback_markdown: str = "") -> None:
+    normalized = normalize_rich_document(document, fallback_markdown)
+    editor.clear()
+    cursor = editor.textCursor()
+    cursor.beginEditBlock()
+    for index, block in enumerate(normalized["blocks"]):
+        if index:
+            cursor.insertBlock(QTextBlockFormat(), QTextCharFormat())
+
+        block_format = QTextBlockFormat()
+        if block["type"].startswith("heading"):
+            block_format.setHeadingLevel(int(block["type"][-1]))
+        cursor.setBlockFormat(block_format)
+
+        if block["type"] == "list_item":
+            list_format = QTextListFormat()
+            list_format.setStyle(QTextListFormat.Style.ListDisc)
+            cursor.createList(list_format)
+
+        for run in block["runs"]:
+            char_format = QTextCharFormat()
+            if block["type"].startswith("heading"):
+                level = int(block["type"][-1])
+                char_format.setFontWeight(QFont.Weight.Bold.value)
+                char_format.setFontPointSize(20 if level == 1 else 17 if level == 2 else 15)
+            elif run.get("bold"):
+                char_format.setFontWeight(QFont.Weight.Bold.value)
+            if run.get("italic"):
+                char_format.setFontItalic(True)
+            if run.get("link"):
+                char_format.setAnchor(True)
+                char_format.setAnchorHref(run["link"])
+                char_format.setFontUnderline(True)
+                char_format.setForeground(QColor("#86efac"))
+            cursor.insertText(run["text"], char_format)
+    cursor.endEditBlock()
+    editor.setTextCursor(cursor)
+
 def editor_document_to_markdown(document: QTextDocument) -> str:
     """Serializa os blocos visuais sem juntar linhas independentes."""
     lines: list[str] = []
@@ -537,16 +793,26 @@ class SubTask:
     id: str
     title: str
     completed: bool = False
+    content_doc: dict = field(default_factory=dict)
+
+    @property
+    def content(self) -> str:
+        return rich_document_to_markdown(self.content_doc, self.title)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        data = asdict(self)
+        data["content_doc"] = normalize_rich_document(self.content_doc, self.title)
+        data["title"] = rich_document_to_markdown(data["content_doc"])
+        return data
 
     @classmethod
     def from_dict(cls, data: dict) -> "SubTask":
+        content_doc = normalize_rich_document(data.get("content_doc"), data.get("title", ""))
         return cls(
             id=data["id"],
-            title=data["title"],
+            title=rich_document_to_markdown(content_doc),
             completed=data.get("completed", False),
+            content_doc=content_doc,
         )
 
 @dataclass
@@ -556,6 +822,7 @@ class Task:
     due_at: str = ""
     recurrence: str = "Sem recorrência"
     details_md: str = ""
+    details_doc: dict = field(default_factory=dict)
     completed: bool = False
     completed_at: str = ""
     reminded_at: str = ""
@@ -584,10 +851,16 @@ class Task:
 
     @property
     def details_plain(self) -> str:
-        return clean_details_text(self.details_md)
+        return clean_details_text(self.details_content)
+
+    @property
+    def details_content(self) -> str:
+        return rich_document_to_markdown(self.details_doc, self.details_md)
 
     def to_dict(self) -> dict:
         data = asdict(self)
+        data["details_doc"] = normalize_rich_document(self.details_doc, self.details_md)
+        data["details_md"] = rich_document_to_markdown(data["details_doc"])
         data["subtasks"] = [s.to_dict() for s in self.subtasks]
         return data
 
@@ -596,12 +869,14 @@ class Task:
         details_md = data.get("details_md", "")
         if not details_md:
             details_md = data.get("details_html", "") or data.get("details", "")
+        details_doc = normalize_rich_document(data.get("details_doc"), details_md)
         return cls(
             id=data["id"],
             title=data["title"],
             due_at=normalize_stored_datetime(data.get("due_at", "")),
             recurrence=data.get("recurrence", "Sem recorrência"),
-            details_md=details_md,
+            details_md=rich_document_to_markdown(details_doc),
+            details_doc=details_doc,
             completed=data.get("completed", False),
             completed_at=normalize_stored_datetime(data.get("completed_at", "")),
             reminded_at=normalize_stored_datetime(data.get("reminded_at", "")),
@@ -610,17 +885,72 @@ class Task:
             subtasks=[SubTask.from_dict(s) for s in data.get("subtasks", []) if isinstance(s, dict)],
         )
 
+def task_due_color(task: Task, reference: Optional[datetime] = None) -> str:
+    """Replica as cores de vencimento usadas na tela inicial do Android."""
+    if task.completed:
+        return "#737373"
+    due = task.due_datetime
+    if due is None:
+        return "#d4d4d4"
+    today = (reference or now_dt()).date()
+    if due.date() < today:
+        return "#f87171"
+    if due.date() == today:
+        return "#d97706"
+    return "#f5f5f5"
+
+def format_task_due(task: Task, reference: Optional[datetime] = None) -> str:
+    """Formata o vencimento com o mesmo texto relativo usado no Android."""
+    due = task.due_datetime
+    if due is None:
+        return "Sem data"
+    today = (reference or now_dt()).date()
+    calendar_day_difference = (due.date() - today).days
+    time_text = due.strftime("%H:%M")
+    if calendar_day_difference == -1:
+        return f"Ontem às {time_text}"
+    if calendar_day_difference == 0:
+        return f"Hoje às {time_text}"
+    if calendar_day_difference == 1:
+        return f"Amanhã às {time_text}"
+    return due.strftime("%d/%m/%Y às %H:%M")
+
+def reconcile_notified_task_ids(
+    notified_ids: set[str],
+    previous_tasks: list[Task],
+    current_tasks: list[Task],
+) -> set[str]:
+    """Libera lembretes que foram redefinidos em outro dispositivo."""
+    previous_by_id = {task.id: task for task in previous_tasks}
+    current_by_id = {task.id: task for task in current_tasks}
+    reconciled = set()
+    for task_id in notified_ids:
+        previous = previous_by_id.get(task_id)
+        current = current_by_id.get(task_id)
+        if previous is None or current is None:
+            continue
+        due_unchanged = previous.due_at == current.due_at
+        reminder_was_not_reset = not previous.reminded_at or bool(current.reminded_at)
+        if due_unchanged and reminder_was_not_reset:
+            reconciled.add(task_id)
+    return reconciled
+
 def markdown_fragment(md: str) -> str:
     rendered = markdown_to_html(md)
     match = re.search(r"<body>(.*)</body>", rendered, flags=re.DOTALL | re.IGNORECASE)
     return match.group(1) if match else rendered
 
+def rich_document_fragment(document, fallback_markdown: str = "") -> str:
+    rendered = rich_document_to_html(document, fallback_markdown)
+    match = re.search(r"<body>(.*)</body>", rendered, flags=re.DOTALL | re.IGNORECASE)
+    return match.group(1) if match else rendered
+
 def task_details_to_html(task: Task) -> str:
     sections = []
-    if task.details_md.strip():
+    if task.details_content.strip():
         sections.append(
             '<div class="section-title">DESCRIÇÃO</div>'
-            f'<div class="description">{markdown_fragment(task.details_md)}</div>'
+            f'<div class="description">{rich_document_fragment(task.details_doc, task.details_md)}</div>'
         )
     if task.subtasks:
         subtask_parts = ['<div class="section-title">SUBTAREFAS</div>']
@@ -632,14 +962,14 @@ def task_details_to_html(task: Task) -> str:
                 f'<div class="subtask{completed_class}">'
                 f'<div class="state"><a class="check" href="willdo-subtask://toggle/{html.escape(subtask.id)}">'
                 f'{checkbox}</a> {state}</div>'
-                f'{markdown_fragment(subtask.title)}'
+                f'{rich_document_fragment(subtask.content_doc, subtask.title)}'
                 '</div>'
             )
         sections.append("".join(subtask_parts))
     body = "".join(sections)
     return f"""
     <html><head><style>
-      body {{ font-family:Arial; color:#e5e5e5; background:#101010; line-height:1.4; margin:4px; }}
+      body {{ font-family:sans-serif; font-size:9pt; color:#e5e5e5; background:#101010; margin:4px; }}
       .section-title {{ color:#a3a3a3; font-size:11px; font-weight:700; margin:6px 0; }}
       .description {{ margin-bottom:10px; }}
       .subtask {{ border:1px solid #303030; border-radius:7px; padding:7px 9px; margin:6px 0; background:#151515; }}
@@ -898,12 +1228,49 @@ class IconCheckBox(QCheckBox):
             painter.drawRoundedRect(box, 4, 4)
 
 
+class DueDateLabel(QLabel):
+    """Data com relógio vetorial, sem depender de emoji ou fonte de ícones."""
+
+    def __init__(self, text: str, show_clock: bool, parent: Optional[QWidget] = None):
+        super().__init__(text, parent)
+        self._show_clock = show_clock
+        self._clock_color = QColor("#d4d4d4")
+        if show_clock:
+            self.setContentsMargins(20, 0, 0, 0)
+
+    def set_clock_color(self, color: str) -> None:
+        self._clock_color = QColor(color)
+        self.update()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        super().paintEvent(event)
+        if not self._show_clock:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(self._clock_color, 1.5))
+        size = 13.0
+        top = (self.height() - size) / 2.0
+        clock = QRectF(1.5, top, size, size)
+        center = clock.center()
+        painter.drawEllipse(clock)
+        painter.drawLine(center, QPointF(center.x(), center.y() - 3.5))
+        painter.drawLine(center, QPointF(center.x() + 3.0, center.y() + 1.5))
+
+
 class SubTaskRow(QWidget):
     clicked = pyqtSignal()
     double_clicked = pyqtSignal()
     wheel_requested = pyqtSignal(int)
 
-    def __init__(self, title: str, checked: bool = False, parent: Optional[QWidget] = None):
+    def __init__(
+        self,
+        title: str,
+        checked: bool = False,
+        parent: Optional[QWidget] = None,
+        content_doc: Optional[dict] = None,
+    ):
         super().__init__(parent)
         self.setObjectName("subtaskCard")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -917,6 +1284,7 @@ class SubTaskRow(QWidget):
         self.checkbox.setChecked(checked)
         self.checkbox.toggled.connect(self.update_style)
         self._title = title.strip()
+        self._content_doc = normalize_rich_document(content_doc, self._title)
         self.title_label = QLabel(self)
         self.title_label.setWordWrap(True)
         self.title_label.setTextFormat(Qt.TextFormat.RichText)
@@ -931,8 +1299,12 @@ class SubTaskRow(QWidget):
     def title(self) -> str:
         return self._title
 
-    def set_title(self, title: str) -> None:
+    def content_doc(self) -> dict:
+        return normalize_rich_document(self._content_doc, self._title)
+
+    def set_title(self, title: str, content_doc: Optional[dict] = None) -> None:
         self._title = title.strip()
+        self._content_doc = normalize_rich_document(content_doc, self._title)
         self.update_style()
 
     def set_selected(self, selected: bool) -> None:
@@ -954,7 +1326,7 @@ class SubTaskRow(QWidget):
         self.title_label.setFont(font)
         color = "#737373" if checked else "#e5e5e5"
         self.title_label.setStyleSheet(f"color:{color};background:transparent;border:none;")
-        rendered = markdown_to_html(self._title)
+        rendered = rich_document_to_html(self._content_doc, self._title)
         if checked:
             rendered = rendered.replace(
                 "body {",
@@ -994,12 +1366,14 @@ class DetailsEditorDialog(QDialog):
         parent: Optional[QWidget] = None,
         initial_text: str = "",
         editing_subtask: bool = False,
+        initial_document: Optional[dict] = None,
     ):
         super().__init__(parent)
         self.editing_subtask = editing_subtask
         self.action: Optional[str] = None
         self.content = ""
-        self.initial_text = initial_text.rstrip()
+        self.content_doc = normalize_rich_document(initial_document, initial_text)
+        self.initial_document = normalize_rich_document(self.content_doc)
         self.setWindowTitle(
             "Editar subtarefa" if editing_subtask else "Detalhes da Tarefa"
         )
@@ -1046,8 +1420,8 @@ class DetailsEditorDialog(QDialog):
             "Escreva a descrição geral ou o conteúdo de uma subtarefa..."
         )
         self.details_edit.setAcceptRichText(True)
-        self.details_edit.setHtml(markdown_to_html(self.initial_text))
-        self.initial_markdown = editor_document_to_markdown(self.details_edit.document())
+        set_text_edit_rich_document(self.details_edit, self.initial_document)
+        self.initial_document = qtext_document_to_rich_document(self.details_edit.document())
         self.details_edit.cursorPositionChanged.connect(self.update_format_buttons)
         self.details_edit.selectionChanged.connect(self.update_format_buttons)
         layout.addWidget(self.details_edit, stretch=1)
@@ -1071,7 +1445,10 @@ class DetailsEditorDialog(QDialog):
         self.update_format_buttons()
 
     def editor_markdown(self) -> str:
-        return editor_document_to_markdown(self.details_edit.document())
+        return rich_document_to_markdown(self.editor_document())
+
+    def editor_document(self) -> dict:
+        return qtext_document_to_rich_document(self.details_edit.document())
 
     def update_format_buttons(self) -> None:
         cursor = self.details_edit.textCursor()
@@ -1202,7 +1579,8 @@ class DetailsEditorDialog(QDialog):
         self.update_format_buttons()
 
     def submit(self, action: str) -> None:
-        content = self.editor_markdown()
+        self.content_doc = self.editor_document()
+        content = rich_document_to_markdown(self.content_doc)
         if action in {"subtask", "subtask_edit"} and not content.strip():
             QMessageBox.warning(self, "Aviso", "Escreva o conteúdo da subtarefa.")
             return
@@ -1211,7 +1589,7 @@ class DetailsEditorDialog(QDialog):
         self.accept()
 
     def reject(self) -> None:
-        if self.editor_markdown() != self.initial_markdown:
+        if self.editor_document() != self.initial_document:
             answer = QMessageBox.question(
                 self,
                 "Descartar detalhes da tarefa?",
@@ -1224,7 +1602,7 @@ class DetailsEditorDialog(QDialog):
         super().reject()
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
-        if self.action is not None or self.editor_markdown() == self.initial_markdown:
+        if self.action is not None or self.editor_document() == self.initial_document:
             event.accept()
             return
         answer = QMessageBox.question(
@@ -1253,7 +1631,8 @@ class TaskEditorDialog(QDialog):
         self.setWindowTitle("Editar tarefa" if task else "Nova tarefa")
         self.setMinimumSize(860, 660)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMinMaxButtonsHint)
-        self.description_md = task.details_md if task else ""
+        self.description_md = task.details_content if task else ""
+        self.description_doc = normalize_rich_document(task.details_doc, task.details_md) if task else markdown_to_rich_document("")
         self.last_subtasks_width = -1
 
         layout = QVBoxLayout(self)
@@ -1357,7 +1736,12 @@ class TaskEditorDialog(QDialog):
             else:
                 self.recurrence_box.setCurrentText(task.recurrence)
             for subtask in task.subtasks:
-                self.add_subtask_item(subtask.title, subtask.completed, subtask.id)
+                self.add_subtask_item(
+                    subtask.content,
+                    subtask.completed,
+                    subtask.id,
+                    subtask.content_doc,
+                )
         else:
             self.use_date_checkbox.setChecked(False)
 
@@ -1407,7 +1791,7 @@ class TaskEditorDialog(QDialog):
 
     def refresh_details_preview(self) -> None:
         if self.description_md.strip():
-            self.details_preview.setHtml(markdown_to_html(self.description_md))
+            self.details_preview.setHtml(rich_document_to_html(self.description_doc, self.description_md))
         else:
             self.details_preview.setHtml(
                 '<html><body style="color:#737373;background:#151515;">'
@@ -1422,17 +1806,24 @@ class TaskEditorDialog(QDialog):
         if not self.title_input.text().strip():
             QMessageBox.warning(self, "Aviso", "Digite o nome da tarefa.")
             return
-        dialog = DetailsEditorDialog(self, self.description_md)
+        dialog = DetailsEditorDialog(
+            self,
+            self.description_md,
+            initial_document=self.description_doc,
+        )
         dialog.setWindowState(dialog.windowState() | Qt.WindowState.WindowMaximized)
         dialog.exec()
         if dialog.action == "description":
             previous = self.description_md
+            previous_doc = self.description_doc
             self.description_md = dialog.content
+            self.description_doc = dialog.content_doc
             if not self.persist_changes("✓ Descrição geral e tarefa salvas."):
                 self.description_md = previous
+                self.description_doc = previous_doc
             self.refresh_details_preview()
         elif dialog.action == "subtask":
-            self.add_subtask_item(dialog.content, False)
+            self.add_subtask_item(dialog.content, False, content_doc=dialog.content_doc)
             if not self.persist_changes("✓ Subtarefa adicionada e tarefa salva."):
                 self.subtasks_list.takeItem(self.subtasks_list.count() - 1)
         self.show()
@@ -1454,17 +1845,17 @@ class TaskEditorDialog(QDialog):
         self.editor_status.show()
         return True
 
-    def subtask_item_height(self, title: str) -> int:
+    def subtask_item_height(self, title: str, content_doc: Optional[dict] = None) -> int:
         available_width = max(280, self.subtasks_list.viewport().width() - 80)
         document = QTextDocument()
-        document.setHtml(markdown_to_html(title))
+        document.setHtml(rich_document_to_html(content_doc, title))
         document.setTextWidth(available_width)
         return max(58, int(document.size().height()) + 18)
 
     def update_subtask_item_height(self, item: QListWidgetItem) -> None:
         row = self.subtasks_list.itemWidget(item)
         if row:
-            item.setSizeHint(QSize(0, self.subtask_item_height(row.title())))
+            item.setSizeHint(QSize(0, self.subtask_item_height(row.title(), row.content_doc())))
 
     def scroll_subtasks(self, delta: int) -> None:
         scrollbar = self.subtasks_list.verticalScrollBar()
@@ -1501,18 +1892,24 @@ class TaskEditorDialog(QDialog):
         title: str,
         checked: bool = False,
         subtask_id: Optional[str] = None,
+        content_doc: Optional[dict] = None,
     ) -> None:
         title = title.strip()
         if not title:
             return
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, subtask_id or uuid.uuid4().hex)
-        row = SubTaskRow(title, checked)
+        item.setData(
+            Qt.ItemDataRole.UserRole.value + 1,
+            normalize_rich_document(content_doc, title),
+        )
+        normalized_doc = normalize_rich_document(content_doc, title)
+        row = SubTaskRow(title, checked, content_doc=normalized_doc)
         row.clicked.connect(lambda current=item: self.toggle_subtask_selection(current))
         row.double_clicked.connect(self.edit_selected_subtask)
         row.wheel_requested.connect(self.scroll_subtasks)
         row.checkbox.clicked.connect(lambda _checked, current=item: self.on_subtask_toggled(current))
-        item.setSizeHint(QSize(0, self.subtask_item_height(title)))
+        item.setSizeHint(QSize(0, self.subtask_item_height(title, normalized_doc)))
         self.subtasks_list.addItem(item)
         self.subtasks_list.setItemWidget(item, row)
 
@@ -1547,15 +1944,23 @@ class TaskEditorDialog(QDialog):
         row = self.subtasks_list.itemWidget(item) if item else None
         if not row:
             return
-        dialog = DetailsEditorDialog(self, row.title(), editing_subtask=True)
+        dialog = DetailsEditorDialog(
+            self,
+            row.title(),
+            editing_subtask=True,
+            initial_document=item.data(Qt.ItemDataRole.UserRole.value + 1),
+        )
         dialog.setWindowState(dialog.windowState() | Qt.WindowState.WindowMaximized)
         dialog.exec()
         if dialog.action == "subtask_edit":
             previous = row.title()
-            row.set_title(dialog.content)
+            previous_doc = item.data(Qt.ItemDataRole.UserRole.value + 1)
+            row.set_title(dialog.content, dialog.content_doc)
+            item.setData(Qt.ItemDataRole.UserRole.value + 1, dialog.content_doc)
             self.update_subtask_item_height(item)
             if not self.persist_changes("✓ Subtarefa atualizada e tarefa salva."):
-                row.set_title(previous)
+                row.set_title(previous, previous_doc)
+                item.setData(Qt.ItemDataRole.UserRole.value + 1, previous_doc)
                 self.update_subtask_item_height(item)
         self.show()
         self.raise_()
@@ -1571,13 +1976,15 @@ class TaskEditorDialog(QDialog):
             subtasks.append({
                 "id": item.data(Qt.ItemDataRole.UserRole),
                 "title": row.title(),
+                "content_doc": row.content_doc(),
                 "completed": row.checkbox.isChecked(),
             })
 
         due_at = ""
         recurrence = "Sem recorrência"
         if self.use_date_checkbox.isChecked():
-            due_at = datetime_to_storage(self.datetime_picker.dateTime().toPyDateTime())
+            selected_due = datetime_at_minute(self.datetime_picker.dateTime().toPyDateTime())
+            due_at = datetime_to_storage(selected_due)
             recurrence = self.recurrence_box.currentText()
             if recurrence == "Personalizado":
                 recurrence = format_custom_recurrence(
@@ -1590,6 +1997,7 @@ class TaskEditorDialog(QDialog):
             "due_at": due_at,
             "recurrence": recurrence,
             "details_md": self.description_md,
+            "details_doc": self.description_doc,
             "subtasks": subtasks,
         }
 
@@ -2425,6 +2833,7 @@ class TodoApp(QWidget):
         self.sync_button.setToolTip("Sincronizando...")
         QApplication.processEvents()
         tasks_file = self.store.tasks_file
+        previous_tasks = list(self.store.tasks)
         loaded = self.store.load()
         if not loaded:
             self.sync_button.setEnabled(True)
@@ -2436,8 +2845,13 @@ class TodoApp(QWidget):
                 f"Não foi possível ler um JSON válido em:\n{tasks_file}",
             )
             return
-        self.notified_task_ids.intersection_update(task.id for task in self.store.tasks)
+        self.notified_task_ids = reconcile_notified_task_ids(
+            self.notified_task_ids,
+            previous_tasks,
+            self.store.tasks,
+        )
         self.load_tasks_into_ui()
+        self.check_reminders()
         self.sync_button.setEnabled(True)
         self.sync_button.setToolTip("Sincronizar novamente")
         self.set_sync_success(
@@ -2517,12 +2931,17 @@ class TodoApp(QWidget):
                 continue
 
             selected_task_id = self.get_selected_task_id()
+            previous_tasks = self.store.tasks
             self.store.tasks = loaded_tasks
             self.store.sort_tasks()
             self.store._last_signature = signature
-            current_ids = {task.id for task in self.store.tasks}
-            self.notified_task_ids.intersection_update(current_ids)
+            self.notified_task_ids = reconcile_notified_task_ids(
+                self.notified_task_ids,
+                previous_tasks,
+                self.store.tasks,
+            )
             self.load_tasks_into_ui(selected_task_id=selected_task_id)
+            self.check_reminders()
             self.set_sync_success("Tarefas do Android sincronizadas automaticamente.")
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
@@ -2570,8 +2989,8 @@ class TodoApp(QWidget):
                 switch_to_completed=task.completed,
             )
 
-    def show_reminder(self, task: Task) -> None:
-        dialog = ReminderDialog(task.title, self.human_due_text(task), task.details_md)
+    def show_reminder(self, task: Task) -> bool:
+        dialog = ReminderDialog(task.title, self.human_due_text(task), task.details_content)
         self.reminder_dialogs.append(dialog)
         dialog.accepted.connect(lambda task_id=task.id: self.open_notification(task_id))
 
@@ -2583,6 +3002,9 @@ class TodoApp(QWidget):
         dialog.finished.connect(release_dialog)
         dialog.show()
         dialog.raise_()
+        dialog.activateWindow()
+        QApplication.processEvents()
+        return dialog.isVisible()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -2590,17 +3012,7 @@ class TodoApp(QWidget):
             self.details_resize_timer.start()
 
     def human_due_text(self, task: Task) -> str:
-        due = task.due_datetime
-        if due is None:
-            return "Sem data"
-        now = now_dt()
-        if due.date() == now.date():
-            return f"Hoje às {due.strftime('%H:%M')}"
-        if due.date() == (now + timedelta(days=1)).date():
-            return f"Amanhã às {due.strftime('%H:%M')}"
-        if due.year == now.year:
-            return due.strftime("%d/%m às %H:%M")
-        return due.strftime("%d/%m/%Y às %H:%M")
+        return format_task_due(task)
 
     def quick_add_task(self) -> None:
         title = self.quick_add_input.text().strip()
@@ -2613,6 +3025,7 @@ class TodoApp(QWidget):
             due_at="",
             recurrence="Sem recorrência",
             details_md="",
+            details_doc=markdown_to_rich_document(""),
             created_at=now,
             updated_at=now,
             subtasks=[],
@@ -2730,6 +3143,7 @@ class TodoApp(QWidget):
                     id=old.id if old else (s.get("id") or uuid.uuid4().hex),
                     title=title,
                     completed=s["completed"],
+                    content_doc=normalize_rich_document(s.get("content_doc"), title),
                 )
             )
 
@@ -2740,6 +3154,7 @@ class TodoApp(QWidget):
                 due_at=data["due_at"],
                 recurrence=data["recurrence"],
                 details_md=data["details_md"],
+                details_doc=normalize_rich_document(data.get("details_doc"), data["details_md"]),
                 created_at=now,
                 updated_at=now,
                 subtasks=subtasks,
@@ -2756,6 +3171,7 @@ class TodoApp(QWidget):
         task.due_at = data["due_at"]
         task.recurrence = data["recurrence"]
         task.details_md = data["details_md"]
+        task.details_doc = normalize_rich_document(data.get("details_doc"), data["details_md"])
         task.subtasks = subtasks
         task.updated_at = now
         if task.due_at != old_due_at:
@@ -2779,7 +3195,7 @@ class TodoApp(QWidget):
 
     def task_meta_text(self, task: Task) -> str:
         meta_parts = []
-        if task.details_md.strip():
+        if task.details_content.strip():
             meta_parts.append("Descrição")
         elif not task.subtasks:
             meta_parts.append("Sem detalhes")
@@ -2830,13 +3246,13 @@ class TodoApp(QWidget):
         text_col.addWidget(subtitle)
         summary_layout.addLayout(text_col, 1)
 
-        date_label = QLabel(self.human_due_text(task))
+        date_label = DueDateLabel(self.human_due_text(task), task.has_due_date)
         date_label.setObjectName("dateLabel")
         date_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         date_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         summary_layout.addWidget(date_label)
 
-        has_details = bool(task.details_md.strip() or task.subtasks)
+        has_details = bool(task.details_content.strip() or task.subtasks)
         if has_details:
             details_button = QPushButton(
                 "Ocultar detalhes" if self.expanded_task_id == task.id else "Ver detalhes"
@@ -3050,7 +3466,10 @@ class TodoApp(QWidget):
             border = "#292929"
             title_style = "color:#f5f5f5;font-weight:700;background:transparent;border:none;"
             subtitle_style = "color:#a3a3a3;background:transparent;border:none;"
-            date_style = "color:#d4d4d4;font-weight:700;background:transparent;border:none;"
+            date_style = (
+                f"color:{task_due_color(task)};font-weight:700;"
+                "background:transparent;border:none;"
+            )
 
         if query:
             haystack = " ".join([
@@ -3058,7 +3477,7 @@ class TodoApp(QWidget):
                 task.details_plain.lower(),
                 task.recurrence.lower(),
                 task.due_at.lower(),
-                " ".join(s.title.lower() for s in task.subtasks),
+                " ".join(s.content.lower() for s in task.subtasks),
                 "concluída" if task.completed else "pendente",
             ])
             if query in haystack:
@@ -3076,6 +3495,8 @@ class TodoApp(QWidget):
         title.setStyleSheet(title_style)
         subtitle.setStyleSheet(subtitle_style)
         date_label.setStyleSheet(date_style)
+        if isinstance(date_label, DueDateLabel):
+            date_label.set_clock_color(task_due_color(task))
 
     def load_tasks_into_ui(self, selected_task_id: Optional[str] = None, switch_to_completed: Optional[bool] = None) -> None:
         self.pending_list.clear()
@@ -3137,7 +3558,7 @@ class TodoApp(QWidget):
                     task.details_plain.lower(),
                     task.recurrence.lower(),
                     task.due_at.lower(),
-                    " ".join(s.title.lower() for s in task.subtasks),
+                    " ".join(s.content.lower() for s in task.subtasks),
                     "concluída" if task.completed else "pendente",
                 ])
                 hidden_by_search = bool(needle) and needle not in haystack
@@ -3306,14 +3727,14 @@ class TodoApp(QWidget):
 
     def setup_reminder(self) -> None:
         self.timer = QTimer(self)
+        self.timer.setTimerType(REMINDER_TIMER_TYPE)
         self.timer.timeout.connect(self.check_reminders)
-        self.timer.start(60000)
+        self.timer.start(REMINDER_CHECK_INTERVAL_MS)
         self.check_reminders()
 
     def check_reminders(self) -> None:
         now = now_dt()
         due_now = []
-        changed = False
 
         for task in self.store.tasks:
             if task.completed or not task.has_due_date:
@@ -3335,6 +3756,17 @@ class TodoApp(QWidget):
                 continue
 
             due_now.append(task)
+
+        changed = False
+        for task in due_now:
+            try:
+                shown = self.show_reminder(task)
+            except Exception as error:
+                print(f"Falha ao exibir lembrete: {error}", file=sys.stderr)
+                shown = False
+            if not shown:
+                continue
+            self.last_notified_task_id = task.id
             task.reminded_at = datetime_to_storage(now)
             task.updated_at = datetime_to_storage(now)
             self.notified_task_ids.add(task.id)
@@ -3343,10 +3775,6 @@ class TodoApp(QWidget):
         if changed:
             self.store.save()
             self.load_tasks_into_ui()
-
-        for task in due_now:
-            self.last_notified_task_id = task.id
-            self.show_reminder(task)
 
 def main() -> int:
     app = QApplication(sys.argv)

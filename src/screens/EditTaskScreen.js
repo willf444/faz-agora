@@ -24,7 +24,7 @@ import {
   Card,
 } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import ExactMarkdown from '../components/ExactMarkdown';
+import RichDocumentView from '../components/RichDocumentView';
 import {
   actions,
   RichEditor,
@@ -43,10 +43,15 @@ import {
   parseCustomRecurrence,
 } from '../utils/recurrence';
 import {
-  editorHtmlToMarkdown,
-  markdownToEditorHtml,
-  normalizeMarkdownFormatting,
-} from '../utils/richText';
+  editorHtmlToRichDocument,
+  markdownToRichDocument,
+  normalizeRichDocument,
+  richDocumentToEditorHtml,
+  richDocumentToMarkdown,
+} from '../utils/richDocument';
+import { applySelectedTime } from '../utils/dateDisplay';
+
+const documentKey = document => JSON.stringify(normalizeRichDocument(document));
 
 export default function EditTaskScreen({ route, navigation }) {
   const theme = useTheme();
@@ -61,9 +66,15 @@ export default function EditTaskScreen({ route, navigation }) {
   const [isSaving, setIsSaving] = useState(false);
 
   const [title, setTitle] = useState(existingTask?.title || '');
-  const initialDetails = normalizeMarkdownFormatting(existingTask?.details_md || '');
+  const initialDetailsDocument = normalizeRichDocument(
+    existingTask?.details_doc,
+    existingTask?.details_md || ''
+  );
+  const initialDetails = richDocumentToMarkdown(initialDetailsDocument);
   const [details, setDetails] = useState(initialDetails);
   const [savedDetails, setSavedDetails] = useState(initialDetails);
+  const [detailsDocument, setDetailsDocument] = useState(initialDetailsDocument);
+  const [savedDetailsDocument, setSavedDetailsDocument] = useState(initialDetailsDocument);
   const [hasDueDate, setHasDueDate] = useState(Boolean(existingTask?.due_at));
   const [dueAt, setDueAt] = useState(
     existingTask?.due_at ? new Date(existingTask.due_at) : new Date()
@@ -75,7 +86,12 @@ export default function EditTaskScreen({ route, navigation }) {
     String(existingCustomRecurrence?.interval || 1)
   );
   const [customUnit, setCustomUnit] = useState(existingCustomRecurrence?.unit || 'days');
-  const [subtasks, setSubtasks] = useState(existingTask?.subtasks || []);
+  const [subtasks, setSubtasks] = useState(
+    (existingTask?.subtasks || []).map(subtask => ({
+      ...subtask,
+      content_doc: normalizeRichDocument(subtask.content_doc, subtask.title || ''),
+    }))
+  );
   const [selectedSubtaskId, setSelectedSubtaskId] = useState(null);
   const [editingSubtaskId, setEditingSubtaskId] = useState(null);
   const [editorStatus, setEditorStatus] = useState(
@@ -83,7 +99,7 @@ export default function EditTaskScreen({ route, navigation }) {
   );
   const [detailsEditorOpen, setDetailsEditorOpen] = useState(false);
   const [editorPurpose, setEditorPurpose] = useState('details');
-  const [editorOpenSnapshot, setEditorOpenSnapshot] = useState(initialDetails);
+  const [editorOpenSnapshot, setEditorOpenSnapshot] = useState(documentKey(initialDetailsDocument));
   const [editorSessionKey, setEditorSessionKey] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -131,14 +147,24 @@ export default function EditTaskScreen({ route, navigation }) {
   const onTimeChange = (event, selectedTime) => {
     setShowTimePicker(false);
     if (selectedTime) {
-      const updated = new Date(dueAt);
-      updated.setHours(selectedTime.getHours(), selectedTime.getMinutes());
-      setDueAt(updated);
+      setDueAt(applySelectedTime(dueAt, selectedTime));
     }
   };
 
   const handleEditorChange = (html) => {
-    setDetails(editorHtmlToMarkdown(html));
+    const document = editorHtmlToRichDocument(html);
+    setDetailsDocument(document);
+    setDetails(richDocumentToMarkdown(document));
+  };
+
+  const readEditorDocument = async () => {
+    try {
+      const html = await richEditorRef.current?.getContentHtml();
+      if (typeof html === 'string') return editorHtmlToRichDocument(html);
+    } catch (_error) {
+      // O estado atualizado pelo onChange continua sendo uma cópia segura.
+    }
+    return normalizeRichDocument(detailsDocument, details);
   };
 
   const insertEditorLink = () => {
@@ -152,7 +178,7 @@ export default function EditTaskScreen({ route, navigation }) {
     richEditorRef.current?.insertLink('', normalizedUrl);
   };
 
-  const persistTask = async (nextDetails, nextSubtasks) => {
+  const persistTask = async (nextDetails, nextDetailsDocument, nextSubtasks) => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       Alert.alert('Aviso', 'Digite o nome da tarefa.');
@@ -175,6 +201,7 @@ export default function EditTaskScreen({ route, navigation }) {
         id: taskId,
         title: trimmedTitle,
         details_md: nextDetails,
+        details_doc: normalizeRichDocument(nextDetailsDocument, nextDetails),
         due_at: finalDueAt,
         recurrence: hasDueDate
           ? (isCustomRecurrence
@@ -222,6 +249,7 @@ export default function EditTaskScreen({ route, navigation }) {
     setEditingSubtaskId(null);
     setEditorPurpose('details');
     setDetails(savedDetails);
+    setDetailsDocument(savedDetailsDocument);
     setDetailsEditorOpen(false);
     setLinkDialogVisible(false);
     setEditorStatus(status);
@@ -235,7 +263,8 @@ export default function EditTaskScreen({ route, navigation }) {
     setEditorPurpose('details');
     setEditingSubtaskId(null);
     setDetails(savedDetails);
-    setEditorOpenSnapshot(savedDetails);
+    setDetailsDocument(savedDetailsDocument);
+    setEditorOpenSnapshot(documentKey(savedDetailsDocument));
     setEditorSessionKey(current => current + 1);
     setEditorStatus('Edite a descrição da tarefa.');
     setDetailsEditorOpen(true);
@@ -250,18 +279,22 @@ export default function EditTaskScreen({ route, navigation }) {
     setEditingSubtaskId(null);
     setEditorPurpose('newSubtask');
     setDetails('');
-    setEditorOpenSnapshot('');
+    setDetailsDocument(markdownToRichDocument(''));
+    setEditorOpenSnapshot(documentKey(markdownToRichDocument('')));
     setEditorSessionKey(current => current + 1);
     setEditorStatus('Escreva o conteúdo da nova subtarefa.');
     setDetailsEditorOpen(true);
   };
 
   const editSubtask = (subtask) => {
+    const subtaskDocument = normalizeRichDocument(subtask.content_doc, subtask.title);
+    const subtaskContent = richDocumentToMarkdown(subtaskDocument);
     setSelectedSubtaskId(subtask.id);
     setEditingSubtaskId(subtask.id);
     setEditorPurpose('editSubtask');
-    setDetails(subtask.title);
-    setEditorOpenSnapshot(subtask.title);
+    setDetails(subtaskContent);
+    setDetailsDocument(subtaskDocument);
+    setEditorOpenSnapshot(documentKey(subtaskDocument));
     setEditorSessionKey(current => current + 1);
     setEditorStatus('Editando a subtarefa selecionada.');
     setDetailsEditorOpen(true);
@@ -284,15 +317,17 @@ export default function EditTaskScreen({ route, navigation }) {
     setEditingSubtaskId(null);
     setEditorPurpose('details');
     setDetails(savedDetails);
+    setDetailsDocument(savedDetailsDocument);
   };
 
-  const requestCloseDetailsEditor = () => {
+  const requestCloseDetailsEditor = async () => {
     if (linkDialogVisible) {
       setLinkDialogVisible(false);
       return;
     }
 
-    if (details.trim() === editorOpenSnapshot.trim()) {
+    const currentDocument = await readEditorDocument();
+    if (documentKey(currentDocument) === editorOpenSnapshot) {
       discardEditorChanges();
       return;
     }
@@ -326,45 +361,57 @@ export default function EditTaskScreen({ route, navigation }) {
   };
 
   const saveEditorContent = async () => {
+    const currentDocument = await readEditorDocument();
+    const currentDetails = richDocumentToMarkdown(currentDocument);
     if (editorPurpose === 'newSubtask') {
-      const trimmed = details.trim();
+      const trimmed = currentDetails.trim();
       if (!trimmed) {
         Alert.alert('Aviso', 'Escreva o conteúdo da subtarefa.');
         return;
       }
       const nextSubtasks = [
         ...subtasks,
-        { id: Crypto.randomUUID(), title: trimmed, completed: false },
+        {
+          id: Crypto.randomUUID(),
+          title: trimmed,
+          content_doc: currentDocument,
+          completed: false,
+        },
       ];
-      if (!await persistTask(savedDetails, nextSubtasks)) return;
+      if (!await persistTask(savedDetails, savedDetailsDocument, nextSubtasks)) return;
       setSubtasks(nextSubtasks);
       finishSubtaskEdit('✓ Subtarefa adicionada e tarefa salva.');
       return;
     }
 
     if (editorPurpose === 'editSubtask' && editingSubtaskId) {
-      const trimmed = details.trim();
+      const trimmed = currentDetails.trim();
       if (!trimmed) {
         Alert.alert('Aviso', 'Escreva o conteúdo da subtarefa.');
         return;
       }
       const nextSubtasks = subtasks.map(s => (
-        s.id === editingSubtaskId ? { ...s, title: trimmed } : s
+        s.id === editingSubtaskId
+          ? { ...s, title: trimmed, content_doc: currentDocument }
+          : s
       ));
-      if (!await persistTask(savedDetails, nextSubtasks)) return;
+      if (!await persistTask(savedDetails, savedDetailsDocument, nextSubtasks)) return;
       setSubtasks(nextSubtasks);
       finishSubtaskEdit('✓ Subtarefa atualizada e tarefa salva.');
       return;
     }
-    if (!await persistTask(details, subtasks)) return;
-    setSavedDetails(details);
-    setEditorOpenSnapshot(details);
+    if (!await persistTask(currentDetails, currentDocument, subtasks)) return;
+    setDetails(currentDetails);
+    setDetailsDocument(currentDocument);
+    setSavedDetails(currentDetails);
+    setSavedDetailsDocument(currentDocument);
+    setEditorOpenSnapshot(documentKey(currentDocument));
     setDetailsEditorOpen(false);
     setEditorStatus('✓ Descrição geral e tarefa salvas.');
   };
 
   const saveTaskWithoutEditor = async () => {
-    if (!await persistTask(savedDetails, subtasks)) return;
+    if (!await persistTask(savedDetails, savedDetailsDocument, subtasks)) return;
     navigation.goBack();
   };
 
@@ -372,13 +419,13 @@ export default function EditTaskScreen({ route, navigation }) {
     const nextSubtasks = subtasks.map(s => (
       s.id === id ? { ...s, completed: !s.completed } : s
     ));
-    if (!await persistTask(savedDetails, nextSubtasks)) return;
+    if (!await persistTask(savedDetails, savedDetailsDocument, nextSubtasks)) return;
     setSubtasks(nextSubtasks);
   };
 
   const removeSubtask = async (id) => {
     const nextSubtasks = subtasks.filter(s => s.id !== id);
-    if (!await persistTask(savedDetails, nextSubtasks)) return;
+    if (!await persistTask(savedDetails, savedDetailsDocument, nextSubtasks)) return;
     setSubtasks(nextSubtasks);
     if (editingSubtaskId === id) {
       finishSubtaskEdit('Subtarefa removida.');
@@ -627,9 +674,11 @@ export default function EditTaskScreen({ route, navigation }) {
                 activeOpacity={0.75}
                 onPress={() => selectSubtask(s)}
               >
-                <ExactMarkdown style={s.completed ? completedMarkdownStyles : subtaskMarkdownStyles}>
-                  {normalizeMarkdownFormatting(s.title)}
-                </ExactMarkdown>
+                <RichDocumentView
+                  document={normalizeRichDocument(s.content_doc, s.title)}
+                  completed={s.completed}
+                  color={s.completed ? '#737373' : '#e5e5e5'}
+                />
               </TouchableOpacity>
             </View>
           ))}
@@ -689,7 +738,7 @@ export default function EditTaskScreen({ route, navigation }) {
             <RichEditor
               key={editorSessionKey}
               ref={richEditorRef}
-              initialContentHTML={markdownToEditorHtml(details)}
+              initialContentHTML={richDocumentToEditorHtml(detailsDocument)}
               initialFocus
               useContainer={false}
               scrollEnabled
@@ -1125,5 +1174,6 @@ const RICH_EDITOR_STYLE = {
   caretColor: '#f5f5f5',
   placeholderColor: '#737373',
   initialCSSText: ':root { color-scheme: dark; } ::selection { background: #525252; color: #ffffff; }',
-  contentCSSText: 'font-size: 16px; line-height: 1.45; padding: 10px 12px; p, div { margin: 0; } ul, ol { margin-top: 0; margin-bottom: 0; } li { margin: 0; }',
+  contentCSSText: 'font-size:16px;line-height:1.45;padding:10px 12px;',
+  cssText: '#editor div,#editor p,#editor h1,#editor h2,#editor h3{margin:0;}#editor ul,#editor ol{margin-top:0;margin-bottom:0;}#editor li{margin:0;}',
 };

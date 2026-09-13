@@ -22,6 +22,8 @@ sudo install -d -o www-data -g www-data -m 0750 /opt/faz-pix
 sudo install -d -o www-data -g www-data -m 0750 /var/lib/faz-pix
 sudo install -o www-data -g www-data -m 0640 "$SCRIPT_DIR/faz_pix_api.py" /opt/faz-pix/faz_pix_api.py
 sudo install -o www-data -g www-data -m 0640 "$SCRIPT_DIR/requirements.txt" /opt/faz-pix/requirements.txt
+sudo install -d -o root -g root -m 0755 /var/www/faz-apoie
+sudo install -o root -g root -m 0644 "$SCRIPT_DIR/apoie.html" /var/www/faz-apoie/index.html
 sudo python3 -m venv /opt/faz-pix/venv
 sudo /opt/faz-pix/venv/bin/pip install -r /opt/faz-pix/requirements.txt
 

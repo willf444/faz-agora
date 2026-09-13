@@ -83,6 +83,8 @@ O Faz agora! é mantido por um desenvolvedor independente. Apoios voluntários a
 
 Mais informações estão disponíveis na área **Sobre o Faz agora!** dos aplicativos.
 
+Também é possível [apoiar o projeto pelo navegador](https://faz.whats.men/apoie).
+
 Conheça também [whats.men](https://whats.men), um projeto para divulgar redes sociais e contatos em um único link.
 
 ## Servidor de apoio

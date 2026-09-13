@@ -128,8 +128,8 @@ android {
         applicationId 'com.willian.willdo'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 24
-        versionName "2.3.4"
+        versionCode 31
+        versionName "2.3.11"
     }
     signingConfigs {
         debug {
