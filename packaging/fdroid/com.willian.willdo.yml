@@ -1,8 +1,6 @@
 Categories:
   - Time
 License: GPL-3.0-or-later
-AntiFeatures:
-  - NonFreeNet
 AuthorName: Willian Ferreira
 AuthorEmail: adm@whats.men
 WebSite: https://github.com/willf444/faz-agora
@@ -11,12 +9,12 @@ IssueTracker: https://github.com/willf444/faz-agora/issues
 Donate: https://faz.whats.men/apoie
 
 AutoName: Faz agora!
+Summary: Organize tasks, reminders and recurrence with optional WebDAV sync
 Description: |-
-  Gerenciador de tarefas livre, sem anúncios e sem rastreamento.
+  A free task manager without advertisements or tracking.
 
-  Crie tarefas, subtarefas, recorrências e lembretes. O aplicativo funciona
-  offline e pode sincronizar seus dados com um servidor WebDAV escolhido por
-  você.
+  Create tasks, subtasks, recurring tasks and reminders. The application works
+  offline and can synchronize data with a WebDAV server chosen by the user.
 
 RepoType: git
 Repo: https://github.com/willf444/faz-agora.git
@@ -34,6 +32,22 @@ Builds:
       - npm ci
     gradle:
       - yes
+    srclibs:
+      - firebase-stub@ce90a956aacda17a85c60577ee443aeb83d876ef
+    prebuild:
+      - cd ../..
+      - sed -i -e '1a "expo":{"autolinking":{"android":{"buildFromSource":[".*"]}}},'
+        package.json
+      - sed -i -e '/installreferrer/d' node_modules/expo-application/android/build.gradle
+      - sed -i -e '/com.android.installreferrer.api/d' -e '/StringBuilder()/,/^      })/d'
+        -e '/getInstallReferrerAsync/apromise.resolve("")'
+        node_modules/expo-application/android/src/main/java/expo/modules/application/ApplicationModule.kt
+      - sed -i -e '/firebase/d' node_modules/expo-notifications/android/build.gradle
+      - cp -a $$firebase-stub$$/firebase-messaging/src node_modules/expo-notifications/android
+    scanignore:
+      - node_modules/react-native/sdks/hermesc/linux64-bin/hermesc
+      - node_modules/expo-modules-core/android/ExpoModulesCorePlugin.gradle
+      - node_modules/expo-modules-autolinking/scripts/android/autolinking_implementation.gradle
     scandelete:
       - node_modules/
 
