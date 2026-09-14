@@ -9,13 +9,6 @@ IssueTracker: https://github.com/willf444/faz-agora/issues
 Donate: https://faz.whats.men/apoie
 
 AutoName: Faz agora!
-Summary: Organize tasks, reminders and recurrence with optional WebDAV sync
-Description: |-
-  A free task manager without advertisements or tracking.
-
-  Create tasks, subtasks, recurring tasks and reminders. The application works
-  offline and can synchronize data with a WebDAV server chosen by the user.
-
 RepoType: git
 Repo: https://github.com/willf444/faz-agora.git
 

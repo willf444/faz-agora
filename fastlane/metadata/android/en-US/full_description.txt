@@ -1,0 +1,7 @@
+Faz agora! is a free task manager without advertisements or tracking.
+
+Create quick tasks or define a date and time. Organize plans with formatted descriptions and interactive subtasks. Configure daily, weekly, monthly, yearly or custom recurrence.
+
+The application works offline. When you want to use more than one device, configure your own WebDAV server to synchronize the same task file between Android and Linux.
+
+Your data remains on the device or on the WebDAV server you choose. Faz agora! does not use telemetry, behavioral advertising or data sales.

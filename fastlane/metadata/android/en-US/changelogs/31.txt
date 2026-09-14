@@ -1,0 +1,4 @@
+Preserve formatted text between Android and Linux.
+Synchronize WebDAV changes automatically while the application is open.
+Schedule synchronized notifications on both devices at the correct time.
+Display relative dates and use colors to identify overdue tasks.
