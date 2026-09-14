@@ -15,7 +15,7 @@ Repo: https://github.com/willf444/faz-agora.git
 Builds:
   - versionName: 2.3.11
     versionCode: 31
-    commit: 3530ec2a0f05a9bd7ec40743b86b633431f75568
+    commit: 5f934200306b9ffd8009ba9c8d6396fc7c062391
     subdir: android/app
     sudo:
       - apt-get update
