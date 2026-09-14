@@ -1,12 +1,11 @@
 faz-agora (2.3.11+ds-1) unstable; urgency=medium
 
   * Initial release. (Closes: #1147640)
-  * Preserva a formatação de texto entre Android e Linux.
-  * Sincroniza alterações WebDAV automaticamente enquanto o aplicativo está
-    aberto.
-  * Agenda notificações recebidas pela sincronização nos dois dispositivos.
-  * Exibe Hoje, Amanhã e Ontem e diferencia tarefas vencidas por cor.
-  * Reempacota o código-fonte sem artefatos pré-compilados não utilizados.
+  * Preserve formatted text between Android and Linux.
+  * Synchronize WebDAV changes automatically while the application is open.
+  * Schedule notifications received through synchronization on both devices.
+  * Display relative dates and distinguish overdue tasks by color.
+  * Repack the upstream source without unused prebuilt artifacts.
 
  -- Willian Ferreira <adm@whats.men>  Sun, 13 Sep 2026 15:37:00 -0300
 
