@@ -50,12 +50,20 @@ import {
   richDocumentToMarkdown,
 } from '../utils/richDocument';
 import { applySelectedTime } from '../utils/dateDisplay';
+import {
+  applyEditorLinkSelection,
+  cancelEditorLinkSelection,
+  installEditorLinkSelection,
+  normalizeEditorLinkUrl,
+  prepareEditorLinkSelection,
+} from '../utils/editorLink';
 
 const documentKey = document => JSON.stringify(normalizeRichDocument(document));
 
 export default function EditTaskScreen({ route, navigation }) {
   const theme = useTheme();
   const richEditorRef = useRef(null);
+  const pendingEditorLinkRef = useRef(null);
   const existingTask = route.params?.task;
   const existingCustomRecurrence = parseCustomRecurrence(existingTask?.recurrence);
   const [taskId] = useState(existingTask?.id || Crypto.randomUUID());
@@ -110,6 +118,7 @@ export default function EditTaskScreen({ route, navigation }) {
   const [customUnitMenuVisible, setCustomUnitMenuVisible] = useState(false);
   const [linkDialogVisible, setLinkDialogVisible] = useState(false);
   const [linkUrl, setLinkUrl] = useState('https://');
+  const [linkLabel, setLinkLabel] = useState('');
 
   const parsedCustomRecurrence = parseCustomRecurrence(recurrence);
   const isCustomRecurrence = recurrence === 'Personalizado' || Boolean(parsedCustomRecurrence);
@@ -167,15 +176,38 @@ export default function EditTaskScreen({ route, navigation }) {
     return normalizeRichDocument(detailsDocument, details);
   };
 
-  const insertEditorLink = () => {
-    const trimmedUrl = linkUrl.trim();
-    if (!trimmedUrl) return;
-    const normalizedUrl = /^https?:\/\//i.test(trimmedUrl)
-      ? trimmedUrl
-      : `https://${trimmedUrl}`;
+  const closeEditorLink = () => {
+    richEditorRef.current?.injectJavascript(cancelEditorLinkSelection);
+    pendingEditorLinkRef.current = null;
     setLinkDialogVisible(false);
     setLinkUrl('https://');
-    richEditorRef.current?.insertLink('', normalizedUrl);
+    setLinkLabel('');
+  };
+
+  const handleEditorMessage = message => {
+    if (message.type !== 'FAZ_LINK_RESULT') return;
+    const pending = pendingEditorLinkRef.current;
+    if (!pending) return;
+    pendingEditorLinkRef.current = null;
+    if (message.data?.applied) return;
+    if (message.data?.hadSelection) {
+      Alert.alert('Link não adicionado', 'Não foi possível manter o trecho selecionado. Selecione a palavra novamente e tente outra vez.');
+      return;
+    }
+    // Sem seleção, mantém a inserção de link que o editor já oferecia.
+    richEditorRef.current?.insertLink(pending.label, pending.url);
+  };
+
+  const insertEditorLink = () => {
+    const normalizedUrl = normalizeEditorLinkUrl(linkUrl);
+    if (!normalizedUrl) return;
+    pendingEditorLinkRef.current = { url: normalizedUrl, label: linkLabel.trim() };
+    richEditorRef.current?.injectJavascript(
+      applyEditorLinkSelection(normalizedUrl, linkLabel.trim())
+    );
+    setLinkDialogVisible(false);
+    setLinkUrl('https://');
+    setLinkLabel('');
   };
 
   const persistTask = async (nextDetails, nextDetailsDocument, nextSubtasks) => {
@@ -251,7 +283,7 @@ export default function EditTaskScreen({ route, navigation }) {
     setDetails(savedDetails);
     setDetailsDocument(savedDetailsDocument);
     setDetailsEditorOpen(false);
-    setLinkDialogVisible(false);
+    closeEditorLink();
     setEditorStatus(status);
   };
 
@@ -313,7 +345,7 @@ export default function EditTaskScreen({ route, navigation }) {
 
   const discardEditorChanges = () => {
     setDetailsEditorOpen(false);
-    setLinkDialogVisible(false);
+    closeEditorLink();
     setEditingSubtaskId(null);
     setEditorPurpose('details');
     setDetails(savedDetails);
@@ -322,7 +354,7 @@ export default function EditTaskScreen({ route, navigation }) {
 
   const requestCloseDetailsEditor = async () => {
     if (linkDialogVisible) {
-      setLinkDialogVisible(false);
+      closeEditorLink();
       return;
     }
 
@@ -345,6 +377,7 @@ export default function EditTaskScreen({ route, navigation }) {
 
   const runEditorAction = (action, selected) => {
     if (action === actions.insertLink) {
+      richEditorRef.current?.injectJavascript(prepareEditorLinkSelection);
       setLinkDialogVisible(true);
       return;
     }
@@ -747,6 +780,8 @@ export default function EditTaskScreen({ route, navigation }) {
                 ? 'Escreva a descrição da tarefa...'
                 : 'Escreva a subtarefa...'}
               onChange={handleEditorChange}
+              onMessage={handleEditorMessage}
+              editorInitializedCallback={() => richEditorRef.current?.injectJavascript(installEditorLinkSelection)}
               autoCorrect
               autoCapitalize="sentences"
               pasteAsPlainText
@@ -767,6 +802,9 @@ export default function EditTaskScreen({ route, navigation }) {
                 activeOpacity={0.72}
                 accessibilityRole="button"
                 accessibilityLabel={EDITOR_ACCESSIBILITY_LABELS[action]}
+                onPressIn={action === actions.insertLink
+                  ? () => richEditorRef.current?.injectJavascript(prepareEditorLinkSelection)
+                  : undefined}
                 onPress={() => runEditorAction(action, selected)}
                 style={[
                   styles.formatButton,
@@ -790,6 +828,9 @@ export default function EditTaskScreen({ route, navigation }) {
 
           {linkDialogVisible && (
             <View style={styles.linkPanel}>
+              <Text variant="bodySmall" style={styles.linkHint}>
+                Selecione uma palavra antes de tocar em Link. Ela será o texto clicável.
+              </Text>
               <TextInput
                 label="Endereço do link"
                 value={linkUrl}
@@ -801,11 +842,18 @@ export default function EditTaskScreen({ route, navigation }) {
                 keyboardType="url"
                 style={styles.linkInput}
               />
+              <TextInput
+                label="Texto exibido (opcional)"
+                value={linkLabel}
+                onChangeText={setLinkLabel}
+                mode="outlined"
+                style={styles.linkInput}
+              />
               <View style={styles.linkActions}>
-                <Button mode="text" onPress={() => setLinkDialogVisible(false)}>
+                <Button mode="text" onPress={closeEditorLink}>
                   Cancelar
                 </Button>
-                <Button mode="contained" onPress={insertEditorLink} disabled={!linkUrl.trim()}>
+                <Button mode="contained" onPress={insertEditorLink} disabled={!normalizeEditorLinkUrl(linkUrl)}>
                   Adicionar
                 </Button>
               </View>
@@ -1029,6 +1077,10 @@ const styles = StyleSheet.create({
   },
   linkInput: {
     backgroundColor: '#151515',
+    marginTop: 6,
+  },
+  linkHint: {
+    color: '#a3a3a3',
   },
   linkActions: {
     flexDirection: 'row',
