@@ -1,0 +1,3 @@
+Require HTTPS for WebDAV synchronization.
+Clarify the support section network requests and supported interface language.
+Remove unused Android permissions.

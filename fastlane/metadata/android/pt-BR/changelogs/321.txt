@@ -1,0 +1,4 @@
+Formatação de texto preservada entre Android e Linux.
+Sincronização WebDAV automática enquanto o aplicativo está aberto.
+Notificações sincronizadas nos dois dispositivos e no horário correto.
+Datas relativas e cores para identificar tarefas vencidas.

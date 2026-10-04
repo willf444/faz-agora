@@ -1,0 +1,2 @@
+Add links to selected words or choose the displayed text in the Android editor.
+Preserve formatting and spacing when saving and syncing with Linux.

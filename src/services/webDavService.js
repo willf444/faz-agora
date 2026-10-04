@@ -233,8 +233,8 @@ export const webDavService = {
   async saveConfig({ url, username, password, autoSync }) {
     const normalizedUrl = normalizeWebDavServerUrl(url);
     const normalizedUsername = username.trim();
-    if (!/^https?:\/\//i.test(normalizedUrl)) {
-      throw new Error('Informe a URL completa do task.json, começando com http:// ou https://.');
+    if (!/^https:\/\//i.test(normalizedUrl)) {
+      throw new Error('Informe a URL do servidor WebDAV usando HTTPS.');
     }
     if (!normalizedUsername) throw new Error('Informe o usuário WebDAV.');
 
@@ -258,12 +258,15 @@ export const webDavService = {
 
   async isConfigured() {
     const config = await this.getConfig();
-    return Boolean(config.url && config.username && config.hasPassword);
+    return Boolean(/^https:\/\//i.test(config.url) && config.username && config.hasPassword);
   },
 
   async sync() {
     const config = await this.getConfig();
     const password = await SecureStore.getItemAsync(PASSWORD_KEY);
+    if (!/^https:\/\//i.test(config.url)) {
+      throw new Error('A sincronização WebDAV exige uma URL HTTPS. Atualize o endereço nas configurações.');
+    }
     if (!config.url || !config.username || !password) {
       throw new Error('Configure a URL, o usuário e a senha do WebDAV primeiro.');
     }

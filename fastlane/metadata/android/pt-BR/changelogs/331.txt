@@ -1,0 +1,3 @@
+Exige HTTPS para sincronização WebDAV.
+Esclarece as conexões da seção de apoio e o idioma disponível na interface.
+Remove permissões Android sem uso.

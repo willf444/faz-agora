@@ -99,9 +99,9 @@ export default function WebDavSettingsScreen({ navigation }) {
             <Switch value={autoSync} onValueChange={setAutoSync} />
           </View>
 
-          {url.startsWith('http://') && (
+          {url.trim().toLowerCase().startsWith('http://') && (
             <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 10 }}>
-              HTTP não protege sua senha. Prefira sempre uma URL HTTPS.
+              Conexões HTTP não são aceitas. Configure o servidor WebDAV com HTTPS.
             </Text>
           )}
 
