@@ -12,7 +12,32 @@ const files = [
   'node_modules/expo-notifications/android/build.gradle',
 ];
 const metadata = yaml.load(fs.readFileSync('packaging/fdroid/com.willian.willdo.yml', 'utf8'));
-const prebuild = metadata.Builds[0].prebuild.slice(1);
+const abiByVersionCode = new Map([
+  [331, 'armeabi-v7a'],
+  [332, 'arm64-v8a'],
+]);
+assert.strictEqual(metadata.Binaries, undefined);
+assert.deepStrictEqual(metadata.Builds.map((build) => build.versionCode), [...abiByVersionCode.keys()]);
+assert.ok(metadata.Builds.every((build) => build.versionName === '2.3.13'));
+assert.ok(metadata.Builds.every((build) => build.commit === 'a7c85c9e60d85638963f27874acd4379b8a9022d'));
+assert.deepStrictEqual(metadata.VercodeOperation, [
+  '10 * %c + 1',
+  '10 * %c + 2',
+]);
+assert.strictEqual(metadata.CurrentVersion, '2.3.13');
+assert.strictEqual(metadata.CurrentVersionCode, 332);
+for (const build of metadata.Builds) {
+  assert.strictEqual(build.prebuild[0], 'cd ../..');
+  assert.strictEqual(build.prebuild[1], 'bash scripts/prepare-fdroid-node-modules.sh $$firebase-stub$$');
+  assert.deepStrictEqual(build.gradleprops, ['android.enableProguardInReleaseBuilds=true']);
+}
+const originalRecipeCommands = [
+  `sed -i -e '1a "expo":{"autolinking":{"android":{"buildFromSource":[".*"]}}},' package.json`,
+  `sed -i -e '/installreferrer/d' node_modules/expo-application/android/build.gradle`,
+  `sed -i -e '/com.android.installreferrer.api/d' -e '/StringBuilder()/,/^      })/d' -e '/getInstallReferrerAsync/apromise.resolve("")' node_modules/expo-application/android/src/main/java/expo/modules/application/ApplicationModule.kt`,
+  `sed -i -e '/firebase/d' node_modules/expo-notifications/android/build.gradle`,
+  'cp -a $$firebase-stub$$/firebase-messaging/src node_modules/expo-notifications/android',
+];
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'faz-fdroid-prep-test-'));
 
 try {
@@ -36,7 +61,7 @@ try {
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
   };
   run(`bash ${JSON.stringify(path.resolve('scripts/prepare-fdroid-node-modules.sh'))} ${JSON.stringify(stub)}`, scripted);
-  for (const command of prebuild) {
+  for (const command of originalRecipeCommands) {
     run(command.replaceAll('$$firebase-stub$$', stub), recipe);
   }
 
@@ -51,7 +76,30 @@ try {
     fs.readFileSync(path.join(scripted, 'node_modules/expo-notifications/android/src/Stub.java'), 'utf8'),
     fs.readFileSync(path.join(recipe, 'node_modules/expo-notifications/android/src/Stub.java'), 'utf8')
   );
-  console.log('Preparação local idêntica à receita F-Droid atual.');
+
+  for (const [versionCode, abi] of abiByVersionCode) {
+    const abiRoot = path.join(temp, `abi-${versionCode}`);
+    fs.mkdirSync(path.join(abiRoot, 'android/app'), { recursive: true });
+    fs.copyFileSync('android/app/build.gradle', path.join(abiRoot, 'android/app/build.gradle'));
+    fs.copyFileSync('android/gradle.properties', path.join(abiRoot, 'android/gradle.properties'));
+    const build = metadata.Builds.find((candidate) => candidate.versionCode === versionCode);
+    for (const command of build.prebuild.slice(2)) {
+      run(command.replaceAll('$$VERCODE$$', String(versionCode)), abiRoot);
+    }
+    assert.match(
+      fs.readFileSync(path.join(abiRoot, 'android/app/build.gradle'), 'utf8'),
+      new RegExp(`^        versionCode ${versionCode}$`, 'm')
+    );
+    assert.match(
+      fs.readFileSync(path.join(abiRoot, 'android/app/build.gradle'), 'utf8'),
+      new RegExp(`^\\s*ndk \\{ abiFilters '${abi}' \\}$`, 'm')
+    );
+    assert.match(
+      fs.readFileSync(path.join(abiRoot, 'android/gradle.properties'), 'utf8'),
+      new RegExp(`^reactNativeArchitectures=${abi}$`, 'm')
+    );
+  }
+  console.log('Preparação local idêntica aos comandos originais F-Droid.');
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }
