@@ -8,4 +8,6 @@ O aplicativo funciona offline. Quando desejar usar mais de um dispositivo, confi
 
 A seção de apoio acessa faz.whats.men para consultar o total das doações. Se você optar por gerar um pagamento Pix, o valor escolhido e seu e-mail são enviados para criar o pagamento, e o app consulta o status. Suas tarefas não são enviadas para esse serviço. Esses recursos de apoio precisam de conexão com a internet.
 
+A seção também apresenta um link para o serviço comercial whats.men, aberto somente se você tocar nele.
+
 Os dados das suas tarefas permanecem no aparelho ou no servidor WebDAV escolhido por você. O Faz agora! não utiliza telemetria, anúncios, cookies comportamentais ou venda de dados.

@@ -8,4 +8,6 @@ The application works offline. When you want to use more than one device, config
 
 The support section connects to faz.whats.men to retrieve donation totals. If you choose to create a Pix payment, the selected amount and your email address are sent to create the payment, and the app checks its status. Your tasks are not sent to this service. An internet connection is required for these support features.
 
+The section also shows a link to the separate commercial whats.men service, which opens only when tapped.
+
 Your task data remains on the device or on the WebDAV server you choose. Faz agora! does not use telemetry, behavioral advertising or data sales.
