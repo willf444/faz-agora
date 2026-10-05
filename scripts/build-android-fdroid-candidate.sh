@@ -8,6 +8,10 @@ version_code="$(node -p "require('${project_dir}/app.json').expo.android.version
 target_apk="${project_dir}/faz-agora-v${version}-fdroid-teste.apk"
 stub_commit=ce90a956aacda17a85c60577ee443aeb83d876ef
 expected_cert=989a3fab64a0bece165e2397a30197299b10f1cdecbf60f1f338284b3a16dc4c
+# O Kotlin do Gradle 8.8 divide caminhos do classpath que contêm espaços.
+# Mantenha a cópia de compilação fora do diretório "Faz Agora!".
+project_parent="$(dirname "$(dirname "$project_dir")")"
+candidate_root="$project_parent/faz-agora-fdroid-candidates"
 
 if [[ "$version" != 2.3.13 || "$version_code" != 33 ]]; then
   echo "Recusado: a candidata deve ser 2.3.13/versionCode 33." >&2
@@ -28,11 +32,11 @@ if [[ ! -x "$sdk_dir/build-tools/34.0.0/apksigner" \
   exit 1
 fi
 
-mkdir -p "$project_dir/dist"
+mkdir -p "$project_dir/dist" "$candidate_root"
 if [[ "${1:-}" == --resume ]]; then
   if [[ $# -eq 1 ]]; then
     shopt -s nullglob
-    work_candidates=("$project_dir"/dist/fdroid-candidate.*)
+    work_candidates=("$candidate_root"/fdroid-candidate.*)
     stub_candidates=("$project_dir"/dist/firebase-stub.*/repo)
     shopt -u nullglob
     if [[ ${#work_candidates[@]} -ne 1 || ${#stub_candidates[@]} -ne 1 ]]; then
@@ -49,8 +53,8 @@ if [[ "${1:-}" == --resume ]]; then
     exit 1
   fi
   case "$work_dir" in
-    "$project_dir"/dist/fdroid-candidate.*) ;;
-    *) echo "Cópia de trabalho fora de dist/: $work_dir" >&2; exit 1 ;;
+    "$candidate_root"/fdroid-candidate.*) ;;
+    *) echo "Cópia de trabalho fora da pasta de candidatos sem espaços: $work_dir" >&2; exit 1 ;;
   esac
   case "$stub_repo" in
     "$project_dir"/dist/firebase-stub.*/repo) ;;
@@ -69,18 +73,26 @@ if [[ "${1:-}" == --resume ]]; then
     exit 1
   fi
   if grep -q '"buildFromSource"' "$work_dir/package.json"; then
-    echo "Preparação já aplicada; não vou aplicá-la duas vezes." >&2
-    exit 1
+    if grep -q 'com.android.installreferrer:installreferrer' "$work_dir/node_modules/expo-application/android/build.gradle" \
+      || grep -q 'StringBuilder()' "$work_dir/node_modules/expo-application/android/src/main/java/expo/modules/application/ApplicationModule.kt" \
+      || grep -q 'com.google.firebase:firebase-messaging' "$work_dir/node_modules/expo-notifications/android/build.gradle" \
+      || [[ ! -d "$work_dir/node_modules/expo-notifications/android/src" ]]; then
+      echo "Preparação anterior incompleta; não vou retomá-la." >&2
+      exit 1
+    fi
+    prepared=true
+  else
+    install -m 755 "$project_dir/scripts/prepare-fdroid-node-modules.sh" \
+      "$work_dir/scripts/prepare-fdroid-node-modules.sh"
+    prepared=false
   fi
-  install -m 755 "$project_dir/scripts/prepare-fdroid-node-modules.sh" \
-    "$work_dir/scripts/prepare-fdroid-node-modules.sh"
   echo "Retomando a cópia já baixada: $work_dir"
 else
   if [[ $# -ne 0 ]]; then
     echo "Uso: $0 [--resume]" >&2
     exit 1
   fi
-  work_dir="$(mktemp -d "$project_dir/dist/fdroid-candidate.XXXXXX")"
+  work_dir="$(mktemp -d "$candidate_root/fdroid-candidate.XXXXXX")"
   chmod 700 "$work_dir"
   echo "Cópia de trabalho: $work_dir"
 
@@ -110,7 +122,9 @@ else
 fi
 
 cd "$work_dir"
-scripts/prepare-fdroid-node-modules.sh "$stub_repo"
+if [[ "${prepared:-false}" != true ]]; then
+  scripts/prepare-fdroid-node-modules.sh "$stub_repo"
+fi
 
 export ANDROID_HOME="$sdk_dir"
 export ANDROID_SDK_ROOT="$sdk_dir"
@@ -136,7 +150,7 @@ if [[ "$badging" != *"name='com.willian.willdo'"* \
   exit 1
 fi
 
-keystore_rel="$(jq -r '.android.keystore.keystorePath' "$project_dir/credentials.json")"
+keystore_rel="$(node -p "require('${project_dir}/credentials.json').android.keystore.keystorePath")"
 case "$keystore_rel" in
   /*|../*|*/../*) echo "Caminho da chave inválido." >&2; exit 1 ;;
 esac
@@ -145,9 +159,9 @@ if [[ ! -f "$keystore_path" ]]; then
   echo "Chave local ausente." >&2
   exit 1
 fi
-key_alias="$(jq -r '.android.keystore.keyAlias' "$project_dir/credentials.json")"
-export FAZ_TEST_STORE_PASS="$(jq -r '.android.keystore.keystorePassword' "$project_dir/credentials.json")"
-export FAZ_TEST_KEY_PASS="$(jq -r '.android.keystore.keyPassword' "$project_dir/credentials.json")"
+key_alias="$(node -p "require('${project_dir}/credentials.json').android.keystore.keyAlias")"
+export FAZ_TEST_STORE_PASS="$(node -p "require('${project_dir}/credentials.json').android.keystore.keystorePassword")"
+export FAZ_TEST_KEY_PASS="$(node -p "require('${project_dir}/credentials.json').android.keystore.keyPassword")"
 signed_temp="$work_dir/faz-agora-v${version}-assinado.apk"
 "$sdk_dir/build-tools/34.0.0/apksigner" sign \
   --ks "$keystore_path" --ks-key-alias "$key_alias" \
