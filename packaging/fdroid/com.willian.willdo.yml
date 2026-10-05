@@ -16,7 +16,7 @@ Repo: https://github.com/willf444/faz-agora.git
 Builds:
   - versionName: 2.3.13
     versionCode: 331
-    commit: 7ec0b5a28f68436724a5b2a4eebdc43393d0de89
+    commit: b43eeeb0111cd35e2dfb8b0253c1ee2dec958587
     subdir: android/app
     sudo:
       - echo "deb https://deb.debian.org/debian bookworm main" > /etc/apt/sources.list.d/bookworm.list
@@ -55,7 +55,7 @@ Builds:
 
   - versionName: 2.3.13
     versionCode: 332
-    commit: 7ec0b5a28f68436724a5b2a4eebdc43393d0de89
+    commit: b43eeeb0111cd35e2dfb8b0253c1ee2dec958587
     subdir: android/app
     sudo:
       - echo "deb https://deb.debian.org/debian bookworm main" > /etc/apt/sources.list.d/bookworm.list

@@ -19,7 +19,7 @@ const abiByVersionCode = new Map([
 assert.strictEqual(metadata.Binaries, undefined);
 assert.deepStrictEqual(metadata.Builds.map((build) => build.versionCode), [...abiByVersionCode.keys()]);
 assert.ok(metadata.Builds.every((build) => build.versionName === '2.3.13'));
-assert.ok(metadata.Builds.every((build) => build.commit === 'a7c85c9e60d85638963f27874acd4379b8a9022d'));
+assert.ok(metadata.Builds.every((build) => build.commit === 'b43eeeb0111cd35e2dfb8b0253c1ee2dec958587'));
 assert.deepStrictEqual(metadata.VercodeOperation, [
   '10 * %c + 1',
   '10 * %c + 2',
