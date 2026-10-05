@@ -6,6 +6,9 @@ sdk_dir="${ANDROID_HOME:-/home/willian/Android/Sdk}"
 version="$(node -p "require('${project_dir}/app.json').expo.version")"
 version_code="$(node -p "require('${project_dir}/app.json').expo.android.versionCode")"
 target_apk="${project_dir}/faz-agora-v${version}-fdroid-teste.apk"
+if [[ -e "$target_apk" ]]; then
+  target_apk="${project_dir}/faz-agora-v${version}-fdroid-teste-revisao.apk"
+fi
 stub_commit=ce90a956aacda17a85c60577ee443aeb83d876ef
 expected_cert=989a3fab64a0bece165e2397a30197299b10f1cdecbf60f1f338284b3a16dc4c
 # O Kotlin do Gradle 8.8 divide caminhos do classpath que contêm espaços.
@@ -72,6 +75,11 @@ if [[ "${1:-}" == --resume ]]; then
     echo "Recusado: a cópia anterior contém credenciais privadas." >&2
     exit 1
   fi
+  for source in \
+    src/services/webDavService.js src/screens/WebDavSettingsScreen.js \
+    src/screens/EditTaskScreen.js src/utils/editorLink.js; do
+    install -D -m 644 "$project_dir/$source" "$work_dir/$source"
+  done
   if grep -q '"buildFromSource"' "$work_dir/package.json"; then
     if grep -q 'com.android.installreferrer:installreferrer' "$work_dir/node_modules/expo-application/android/build.gradle" \
       || grep -q 'StringBuilder()' "$work_dir/node_modules/expo-application/android/src/main/java/expo/modules/application/ApplicationModule.kt" \

@@ -55,7 +55,7 @@ export default function WebDavSettingsScreen({ navigation }) {
         <Card.Content>
           <Text variant="titleMedium" style={styles.title}>Sincronização WebDAV</Text>
           <Text variant="bodySmall" style={styles.description}>
-            Informe a URL do seu servidor WebDAV. O arquivo task.json será criado automaticamente na primeira sincronização.
+            Use a URL HTTPS do seu servidor WebDAV. Endereços HTTP não são aceitos. O arquivo task.json será criado automaticamente na primeira sincronização.
           </Text>
 
           <TextInput
@@ -101,7 +101,7 @@ export default function WebDavSettingsScreen({ navigation }) {
 
           {url.trim().toLowerCase().startsWith('http://') && (
             <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 10 }}>
-              Conexões HTTP não são aceitas. Configure o servidor WebDAV com HTTPS.
+              Este endereço HTTP não poderá ser salvo. Troque para uma URL HTTPS.
             </Text>
           )}
 
