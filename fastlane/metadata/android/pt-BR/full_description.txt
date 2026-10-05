@@ -4,7 +4,7 @@ A interface do aplicativo está disponível somente em português brasileiro.
 
 Crie tarefas rápidas ou defina data e hora. Organize planos com descrições formatadas e subtarefas interativas. Configure recorrências diárias, semanais, mensais, anuais ou personalizadas.
 
-O aplicativo funciona offline. Quando desejar usar mais de um dispositivo, configure seu próprio servidor WebDAV para sincronizar o mesmo arquivo de tarefas entre Android e Linux.
+O aplicativo funciona offline. Quando desejar usar mais de um dispositivo, configure seu próprio servidor WebDAV para sincronizar o mesmo arquivo de tarefas entre Android e Linux. A sincronização aceita somente endereços HTTPS; servidores HTTP não são aceitos.
 
 A seção de apoio acessa faz.whats.men para consultar o total das doações. Se você optar por gerar um pagamento Pix, o valor escolhido e seu e-mail são enviados para criar o pagamento, e o app consulta o status. Suas tarefas não são enviadas para esse serviço. Esses recursos de apoio precisam de conexão com a internet.
 
