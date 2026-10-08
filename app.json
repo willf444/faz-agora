@@ -2,7 +2,7 @@
   "expo": {
     "name": "Faz agora!",
     "slug": "willdo-mobile",
-    "version": "2.3.13",
+    "version": "2.3.14",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -18,7 +18,7 @@
       "supportsTablet": true
     },
     "android": {
-      "versionCode": 33,
+      "versionCode": 34,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"

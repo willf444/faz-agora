@@ -16,8 +16,8 @@ expected_cert=989a3fab64a0bece165e2397a30197299b10f1cdecbf60f1f338284b3a16dc4c
 project_parent="$(dirname "$(dirname "$project_dir")")"
 candidate_root="$project_parent/faz-agora-fdroid-candidates"
 
-if [[ "$version" != 2.3.13 || "$version_code" != 33 ]]; then
-  echo "Recusado: a candidata deve ser 2.3.13/versionCode 33." >&2
+if [[ "$version" != 2.3.14 || "$version_code" != 34 ]]; then
+  echo "Recusado: a candidata deve ser 2.3.14/versionCode 34." >&2
   exit 1
 fi
 if [[ -e "$target_apk" ]]; then
@@ -152,9 +152,15 @@ fi
 "$sdk_dir/build-tools/34.0.0/zipalign" -c -p 4 "$unsigned_apk"
 badging="$("$sdk_dir/build-tools/34.0.0/aapt" dump badging "$unsigned_apk" | sed -n '1p')"
 if [[ "$badging" != *"name='com.willian.willdo'"* \
-  || "$badging" != *"versionCode='33'"* \
-  || "$badging" != *"versionName='2.3.13'"* ]]; then
+  || "$badging" != *"versionCode='34'"* \
+  || "$badging" != *"versionName='2.3.14'"* ]]; then
   echo "Nome do pacote ou versão incorretos no APK unsigned: $badging" >&2
+  exit 1
+fi
+permissions_dump="$("$sdk_dir/build-tools/34.0.0/aapt" dump permissions "$unsigned_apk")"
+if grep -Eq 'android\.permission\.(READ|WRITE)_EXTERNAL_STORAGE' <<< "$permissions_dump"; then
+  echo "O APK ainda contém uma permissão de armazenamento que deveria ter sido removida." >&2
+  grep -E 'android\.permission\.(READ|WRITE)_EXTERNAL_STORAGE' <<< "$permissions_dump" >&2
   exit 1
 fi
 

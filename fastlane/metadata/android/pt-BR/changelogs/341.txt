@@ -1,0 +1,1 @@
+Removidas permissões de armazenamento sem uso do aplicativo.
