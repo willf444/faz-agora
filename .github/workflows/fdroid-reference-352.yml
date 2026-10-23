@@ -31,9 +31,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p fdroiddata/metadata
+          mkdir -p fdroiddata/metadata fdroiddata/srclibs
           cp packaging/fdroid/com.willian.willdo.yml \
             fdroiddata/metadata/com.willian.willdo.yml
+          cat > fdroiddata/srclibs/firebase-stub.yml <<'EOF'
+          RepoType: git
+          Repo: https://gitlab.com/freed-by-fdroid/firebase-stubs.git
+          EOF
           # This temporary build must generate the 352 artifact first. The
           # public metadata keeps Binaries and is not changed by this job.
           sed -i '/^Binaries:/d' fdroiddata/metadata/com.willian.willdo.yml
@@ -41,7 +45,8 @@ jobs:
           git -C fdroiddata config user.name 'Faz agora! F-Droid build'
           git -C fdroiddata config user.email 'adm@whats.men'
           cp fdroidserver/examples/config.yml fdroiddata/config.yml
-          git -C fdroiddata add config.yml metadata/com.willian.willdo.yml
+          git -C fdroiddata add config.yml metadata/com.willian.willdo.yml \
+            srclibs/firebase-stub.yml
           git -C fdroiddata commit --quiet -m 'Temporary F-Droid reference build'
 
       - name: Build versionCode 352 in the F-Droid buildserver
