@@ -12,11 +12,12 @@ AutoName: Faz agora!
 
 RepoType: git
 Repo: https://github.com/willf444/faz-agora.git
+Binaries: https://github.com/willf444/faz-agora/releases/download/v%v/faz-agora-v%v-%c.apk
 
 Builds:
-  - versionName: 2.3.13
-    versionCode: 331
-    commit: b43eeeb0111cd35e2dfb8b0253c1ee2dec958587
+  - versionName: 2.3.15
+    versionCode: 351
+    commit: a79e5aa59589aa541ba372dfdb0e3c6bc38e2612
     subdir: android/app
     sudo:
       - echo "deb https://deb.debian.org/debian bookworm main" > /etc/apt/sources.list.d/bookworm.list
@@ -53,9 +54,9 @@ Builds:
     gradleprops:
       - android.enableProguardInReleaseBuilds=true
 
-  - versionName: 2.3.13
-    versionCode: 332
-    commit: b43eeeb0111cd35e2dfb8b0253c1ee2dec958587
+  - versionName: 2.3.15
+    versionCode: 352
+    commit: a79e5aa59589aa541ba372dfdb0e3c6bc38e2612
     subdir: android/app
     sudo:
       - echo "deb https://deb.debian.org/debian bookworm main" > /etc/apt/sources.list.d/bookworm.list
@@ -102,5 +103,5 @@ UpdateCheckMode: Tags
 VercodeOperation:
   - 10 * %c + 1
   - 10 * %c + 2
-CurrentVersion: 2.3.13
-CurrentVersionCode: 332
+CurrentVersion: 2.3.15
+CurrentVersionCode: 352
