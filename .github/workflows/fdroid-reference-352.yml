@@ -1,0 +1,61 @@
+name: Build F-Droid reference 352
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-reference-352:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out the release source
+        uses: actions/checkout@v4
+        with:
+          ref: a79e5aa59589aa541ba372dfdb0e3c6bc38e2612
+          fetch-depth: 1
+
+      - name: Fetch the F-Droid buildserver tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth=1 --quiet \
+            https://gitlab.com/fdroid/fdroidserver.git fdroidserver
+
+      - name: Prepare F-Droid metadata workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p fdroiddata/metadata
+          cp packaging/fdroid/com.willian.willdo.yml \
+            fdroiddata/metadata/com.willian.willdo.yml
+          # This temporary build must generate the 352 artifact first. The
+          # public metadata keeps Binaries and is not changed by this job.
+          sed -i '/^Binaries:/d' fdroiddata/metadata/com.willian.willdo.yml
+          git init --quiet fdroiddata
+          git -C fdroiddata config user.name 'Faz agora! F-Droid build'
+          git -C fdroiddata config user.email 'adm@whats.men'
+          cp fdroidserver/examples/config.yml fdroiddata/config.yml
+          git -C fdroiddata add config.yml metadata/com.willian.willdo.yml
+          git -C fdroiddata commit --quiet -m 'Temporary F-Droid reference build'
+
+      - name: Build versionCode 352 in the F-Droid buildserver
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod -R a+rwX fdroiddata
+          docker run --rm -u vagrant --entrypoint /bin/bash \
+            -v "$GITHUB_WORKSPACE/fdroiddata:/build" \
+            -v "$GITHUB_WORKSPACE/fdroidserver:/home/vagrant/fdroidserver" \
+            registry.gitlab.com/fdroid/fdroidserver:buildserver \
+            -lc '. /etc/profile; export PATH="$fdroidserver:$PATH" PYTHONPATH="$fdroidserver"; cd /build; fdroid readmeta; fdroid build com.willian.willdo:352 --verbose'
+
+      - name: Upload unsigned reference artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: faz-agora-v2.3.15-352-unsigned
+          if-no-files-found: error
+          path: fdroiddata/unsigned/com.willian.willdo_352.apk
