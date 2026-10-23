@@ -51,7 +51,7 @@ jobs:
             -v "$GITHUB_WORKSPACE/fdroiddata:/build" \
             -v "$GITHUB_WORKSPACE/fdroidserver:/home/vagrant/fdroidserver" \
             registry.gitlab.com/fdroid/fdroidserver:buildserver \
-            -lc '. /etc/profile; export PATH="$fdroidserver:$PATH" PYTHONPATH="$fdroidserver"; cd /build; fdroid readmeta; fdroid build com.willian.willdo:352 --verbose'
+            -lc '. /etc/profile; export PATH="$fdroidserver:$PATH" PYTHONPATH="$fdroidserver"; git config --global --add safe.directory /build; cd /build; fdroid readmeta; fdroid build com.willian.willdo:352 --verbose'
 
       - name: Upload unsigned reference artifact
         uses: actions/upload-artifact@v4
