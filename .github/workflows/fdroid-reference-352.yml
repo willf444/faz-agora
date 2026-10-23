@@ -15,7 +15,9 @@ jobs:
       - name: Check out the release source
         uses: actions/checkout@v4
         with:
-          ref: a79e5aa59589aa541ba372dfdb0e3c6bc38e2612
+          # This checkout supplies the current 2.3.15 F-Droid recipe. The
+          # recipe itself pins the application source to a79e5aa.
+          ref: af8eb64e0d522a1ddbd84ccfca53fddf8b9dd80a
           fetch-depth: 1
 
       - name: Fetch the F-Droid buildserver tools
