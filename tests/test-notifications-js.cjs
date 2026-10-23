@@ -90,6 +90,9 @@ vm.runInNewContext(transformed, {
   if (scheduled.length !== 1 || scheduled[0].request.content.data.taskId !== 'future') {
     throw new Error('A restauração não agendou somente a tarefa futura pendente.');
   }
+  if (Object.prototype.hasOwnProperty.call(scheduled[0].request.content, 'sound')) {
+    throw new Error('O conteúdo da notificação não deve carregar sound como URI serializável.');
+  }
   if (!savedTasks[0].notificationId.startsWith('scheduled-')) {
     throw new Error('O novo identificador da notificação não foi salvo.');
   }

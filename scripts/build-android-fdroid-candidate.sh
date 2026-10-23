@@ -16,8 +16,8 @@ expected_cert=989a3fab64a0bece165e2397a30197299b10f1cdecbf60f1f338284b3a16dc4c
 project_parent="$(dirname "$(dirname "$project_dir")")"
 candidate_root="$project_parent/faz-agora-fdroid-candidates"
 
-if [[ "$version" != 2.3.14 || "$version_code" != 34 ]]; then
-  echo "Recusado: a candidata deve ser 2.3.14/versionCode 34." >&2
+if [[ "$version" != 2.3.15 || "$version_code" != 35 ]]; then
+  echo "Recusado: a candidata deve ser 2.3.15/versionCode 35." >&2
   exit 1
 fi
 if [[ -e "$target_apk" ]]; then
@@ -76,7 +76,8 @@ if [[ "${1:-}" == --resume ]]; then
     exit 1
   fi
   for source in \
-    src/services/webDavService.js src/screens/WebDavSettingsScreen.js \
+    src/services/notificationService.js src/services/webDavService.js \
+    src/screens/WebDavSettingsScreen.js \
     src/screens/EditTaskScreen.js src/utils/editorLink.js; do
     install -D -m 644 "$project_dir/$source" "$work_dir/$source"
   done
@@ -114,7 +115,8 @@ else
   for source in \
     app.json android/app/build.gradle package.json package-lock.json \
     android/app/src/main/AndroidManifest.xml \
-    src/services/webDavService.js src/screens/WebDavSettingsScreen.js \
+    src/services/notificationService.js src/services/webDavService.js \
+    src/screens/WebDavSettingsScreen.js \
     src/screens/EditTaskScreen.js src/utils/editorLink.js \
     scripts/prepare-fdroid-node-modules.sh; do
     install -D -m 644 "$project_dir/$source" "$work_dir/$source"
@@ -152,8 +154,8 @@ fi
 "$sdk_dir/build-tools/34.0.0/zipalign" -c -p 4 "$unsigned_apk"
 badging="$("$sdk_dir/build-tools/34.0.0/aapt" dump badging "$unsigned_apk" | sed -n '1p')"
 if [[ "$badging" != *"name='com.willian.willdo'"* \
-  || "$badging" != *"versionCode='34'"* \
-  || "$badging" != *"versionName='2.3.14'"* ]]; then
+  || "$badging" != *"versionCode='35'"* \
+  || "$badging" != *"versionName='2.3.15'"* ]]; then
   echo "Nome do pacote ou versão incorretos no APK unsigned: $badging" >&2
   exit 1
 fi

@@ -1,0 +1,2 @@
+Fix task notification scheduling on Android.
+Keep sound and vibration through the system notification channel.

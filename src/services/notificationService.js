@@ -55,7 +55,6 @@ export const notificationService = {
         content: {
           title: `⏰ ${task.title}`,
           data: { taskId: task.id },
-          sound: 'default',
         },
         trigger: {
           date: triggerDate,

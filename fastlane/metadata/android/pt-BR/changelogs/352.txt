@@ -1,0 +1,2 @@
+Corrige o agendamento das notificações de tarefas no Android.
+Mantém o som e a vibração pelo canal de notificações do sistema.
