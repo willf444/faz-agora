@@ -6,7 +6,7 @@ O Faz agora! funciona offline e pode sincronizar tarefas entre dispositivos por 
 
 ## Disponibilidade
 
-- Android: APK disponível na [versão 2.3.12](https://github.com/willf444/faz-agora/releases/tag/v2.3.12); [inclusão no F-Droid em análise](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/48910).
+- Android: o aplicativo já está publicado no [F-Droid](https://f-droid.org/packages/com.willian.willdo/); as versões mais atualizadas aparecem primeiro nas [releases do GitHub](https://github.com/willf444/faz-agora/releases).
 - Linux: [baixar diretamente o pacote Debian 2.3.11](https://github.com/willf444/faz-agora/releases/download/v2.3.11/faz-agora_2.3.11_all.deb); inclusão no Debian em preparação.
 - Flathub: pacote validado localmente; nova submissão planejada após o período de histórico de desenvolvimento solicitado pelo Flathub.
 - Código-fonte e versões diretas: publicados neste repositório.
