@@ -51,9 +51,6 @@ Builds:
       - node_modules/expo-modules-autolinking/scripts/android/autolinking_implementation.gradle
     scandelete:
       - node_modules/
-    gradleprops:
-      - android.enableProguardInReleaseBuilds=true
-
   - versionName: 2.3.15
     versionCode: 352
     commit: a79e5aa59589aa541ba372dfdb0e3c6bc38e2612
@@ -90,9 +87,6 @@ Builds:
       - node_modules/expo-modules-autolinking/scripts/android/autolinking_implementation.gradle
     scandelete:
       - node_modules/
-    gradleprops:
-      - android.enableProguardInReleaseBuilds=true
-
 AllowedAPKSigningKeys: 989a3fab64a0bece165e2397a30197299b10f1cdecbf60f1f338284b3a16dc4c
 
 MaintainerNotes: Binary scanner detects `com/google/firebase` classes from the libre
