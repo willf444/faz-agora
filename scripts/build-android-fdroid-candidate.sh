@@ -12,9 +12,8 @@ fi
 stub_commit=ce90a956aacda17a85c60577ee443aeb83d876ef
 expected_cert=989a3fab64a0bece165e2397a30197299b10f1cdecbf60f1f338284b3a16dc4c
 # O Kotlin do Gradle 8.8 divide caminhos do classpath que contêm espaços.
-# Mantenha a cópia de compilação fora do diretório "Faz Agora!".
-project_parent="$(dirname "$(dirname "$project_dir")")"
-candidate_root="$project_parent/faz-agora-fdroid-candidates"
+# As cópias de compilação ficam dentro de dist/, separadas do código versionado.
+candidate_root="$project_dir/dist/fdroid-candidates"
 
 if [[ "$version" != 2.3.15 || "$version_code" != 35 ]]; then
   echo "Recusado: a candidata deve ser 2.3.15/versionCode 35." >&2
