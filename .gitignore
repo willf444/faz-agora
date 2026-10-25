@@ -29,3 +29,5 @@ debian/files
 *.buildinfo
 *.changes
 *.dsc
+*.apk.idsig
+docs/local/

@@ -17,7 +17,7 @@ jobs:
         with:
           # This checkout supplies the current 2.3.15 F-Droid recipe without
           # the minification setting that broke notifications in the 352 APK.
-          ref: b50961b
+          ref: b50961b68e76f001b8c31cf317f90f93795af298
           fetch-depth: 1
 
       - name: Fetch the F-Droid buildserver tools

@@ -1,8 +1,6 @@
 # Faz agora!
 
-Gerenciador de tarefas livre, sem anúncios e sem rastreamento, disponível para Android e Linux.
-
-O Faz agora! funciona offline e pode sincronizar tarefas entre dispositivos por meio de um servidor WebDAV escolhido pelo usuário. Os aplicativos Android e Linux utilizam o mesmo arquivo `task.json`.
+Gerenciador de tarefas livre, sem anúncios ou telemetria, para Android e Linux. O núcleo funciona offline; o usuário pode sincronizar os mesmos dados entre plataformas com uma pasta WebDAV configurada por ele.
 
 ## Disponibilidade
 
@@ -13,89 +11,58 @@ O Faz agora! funciona offline e pode sincronizar tarefas entre dispositivos por 
 
 ## Recursos
 
-- Tarefas rápidas ou com data e hora.
-- Recorrência diária, semanal, mensal, anual ou personalizada.
-- Descrições e subtarefas com formatação visual.
-- Checklist interativo de subtarefas.
+- Tarefas rápidas ou com data e hora e recorrência diária, semanal, mensal, anual ou personalizada.
+- Descrições e subtarefas formatadas, com checklist.
 - Busca em tarefas pendentes e concluídas.
 - Notificações locais.
 - Sincronização WebDAV bidirecional.
-- Funcionamento offline.
 - Interface escura e compacta.
+- A interface Android está disponível somente em português brasileiro.
 
-## Privacidade
+## Privacidade e conexões
 
-O Faz agora! não possui anúncios, telemetria ou rastreamento. As tarefas permanecem no dispositivo, salvo quando o próprio usuário configura a sincronização WebDAV.
+O app não tem anúncios, telemetria ou rastreamento. O conteúdo das tarefas permanece no dispositivo, exceto quando o usuário configura sua sincronização WebDAV. No Android, a senha WebDAV fica no armazenamento seguro do sistema e somente URLs HTTPS são aceitas.
 
-No Android, a senha WebDAV é armazenada no armazenamento seguro do sistema. No Linux, a conexão com o compartilhamento WebDAV é gerenciada pelo ambiente do usuário.
-
-## Android
-
-O aplicativo Android foi desenvolvido com React Native e Expo. Para executar o projeto em modo de desenvolvimento:
-
-```bash
-npm install
-npx expo start
-```
-
-Para gerar localmente um APK assinado, depois de configurar a chave de assinatura:
-
-```bash
-npm run build:apk
-```
-
-O script de construção não envia o código para serviços externos.
-
-## Linux
-
-O aplicativo para Linux requer Python 3 e PyQt6:
-
-```bash
-python3 -m pip install PyQt6
-python3 faz-agora.py
-```
-
-As tarefas são armazenadas em `task.json`. Para compartilhar tarefas com o Android, selecione no aplicativo uma pasta WebDAV já montada pelo sistema.
-
-Para gerar o pacote Debian localmente:
-
-```bash
-npm run build:deb
-```
-
-O arquivo `.deb` será criado na pasta `dist/`.
-
-## Flatpak
-
-O manifesto para construção e futura submissão ao Flathub está em `packaging/flatpak/men.whats.FazAgora.yml`. O identificador do aplicativo Linux é `men.whats.FazAgora`.
+A seção de apoio consulta `faz.whats.men` para exibir o total mensal de doações. Ao solicitar um Pix, o app envia o valor escolhido e o e-mail para criar o pagamento e consulta seu estado. O conteúdo das tarefas não é enviado a esse serviço. Essa conexão é separada do WebDAV.
 
 ## Sincronização WebDAV
 
-1. Configure ou escolha uma pasta em seu servidor WebDAV.
+1. Escolha uma pasta em um servidor WebDAV.
 2. No Linux, selecione a pasta montada que conterá `task.json`.
-3. No Android, informe a URL da pasta WebDAV, o usuário e a senha.
+3. No Android, informe a URL HTTPS, o usuário e a senha.
 4. Use **Salvar e sincronizar** na primeira conexão.
 
-O arquivo `task.json` será criado automaticamente quando necessário. Use sempre HTTPS ao informar credenciais diretamente no Android.
+O arquivo `task.json` é criado quando necessário. O Android não aceita WebDAV por HTTP simples.
+
+## Desenvolvimento Android
+
+O app usa React Native e Expo. Com Node.js e npm instalados:
+
+```bash
+npm ci
+npx expo start
+```
+
+Para preparar um APK local assinado, configure as credenciais de assinatura locais e use `npm run build:apk`. O build pode baixar dependências do npm e Gradle. Nunca inclua credenciais, chaves, APKs ou dados reais de tarefas no Git.
+
+## Linux
+
+O app requer Python 3 e PyQt6. Instale PyQt6 pelo sistema/ambiente virtual e execute:
+
+```bash
+python3 faz-agora.py
+```
+
+Para gerar o pacote Debian localmente, execute `npm run build:deb`; o arquivo é criado em `dist/`.
+
+## Flatpak
+
+O manifesto está em `packaging/flatpak/men.whats.FazAgora.yml`; o ID é `men.whats.FazAgora`.
 
 ## Apoie o projeto
 
-O Faz agora! é mantido por um desenvolvedor independente. Apoios voluntários ajudam a custear servidor, domínio, ferramentas e manutenção.
-
-Mais informações estão disponíveis na área **Sobre o Faz agora!** dos aplicativos.
-
-Também é possível [apoiar o projeto pelo navegador](https://faz.whats.men/apoie).
-
-Conheça também [whats.men](https://whats.men), um projeto para divulgar redes sociais e contatos em um único link.
-
-## Servidor de apoio
-
-A pasta `server/` contém a API utilizada exclusivamente para gerar contribuições voluntárias via Pix e apresentar o progresso mensal. Credenciais e dados de pagamentos não fazem parte deste repositório.
-
-O servidor não é necessário para armazenar ou sincronizar tarefas.
+O projeto é mantido por um desenvolvedor independente. Mais informações estão na área **Sobre o Faz agora!** e em [faz.whats.men/apoie](https://faz.whats.men/apoie). Conheça também [whats.men](https://whats.men). A API em `server/` atende a área de apoio/Pix; ela não armazena nem sincroniza tarefas.
 
 ## Licença
 
-Copyright © 2026 Willian Ferreira.
-
-Este projeto é software livre, distribuído sob a licença [GNU General Public License v3.0 ou posterior](LICENSE).
+Copyright © 2026 Willian Ferreira. Distribuído sob a [GNU GPL v3.0 ou posterior](LICENSE).
