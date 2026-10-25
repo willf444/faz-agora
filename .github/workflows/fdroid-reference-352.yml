@@ -54,11 +54,16 @@ jobs:
         run: |
           set -euo pipefail
           chmod -R a+rwX fdroiddata
-          docker run --rm -u vagrant --entrypoint /bin/bash \
-            -v "$GITHUB_WORKSPACE/fdroiddata:/build" \
-            -v "$GITHUB_WORKSPACE/fdroidserver:/home/vagrant/fdroidserver" \
-            registry.gitlab.com/fdroid/fdroidserver:buildserver \
-            -lc '. /etc/profile; export PATH="$fdroidserver:$PATH" PYTHONPATH="$fdroidserver:$fdroidserver/examples"; git config --global --add safe.directory /build; git config --global --add safe.directory /home/vagrant/fdroidserver; cd /build; fdroid readmeta; fdroid fetchsrclibs --verbose com.willian.willdo:351; fdroid fetchsrclibs --verbose com.willian.willdo:352; fdroid build --on-server --no-tarball com.willian.willdo:351 --verbose; fdroid build --on-server --no-tarball com.willian.willdo:352 --verbose'
+          build_one() {
+            local vercode="$1"
+            docker run --rm -u vagrant --entrypoint /bin/bash \
+              -v "$GITHUB_WORKSPACE/fdroiddata:/build" \
+              -v "$GITHUB_WORKSPACE/fdroidserver:/home/vagrant/fdroidserver" \
+              registry.gitlab.com/fdroid/fdroidserver:buildserver \
+              -lc '. /etc/profile; export PATH="$fdroidserver:$PATH" PYTHONPATH="$fdroidserver:$fdroidserver/examples"; git config --global --add safe.directory /build; git config --global --add safe.directory /home/vagrant/fdroidserver; cd /build; fdroid readmeta; fdroid fetchsrclibs --verbose com.willian.willdo:'"$vercode"'; fdroid build --on-server --no-tarball com.willian.willdo:'"$vercode"' --verbose'
+          }
+          build_one 351
+          build_one 352
 
       - name: Upload unsigned reference artifact
         uses: actions/upload-artifact@v4
