@@ -56,10 +56,13 @@ jobs:
           chmod -R a+rwX fdroiddata
           build_one() {
             local vercode="$1"
+            # Keep the same buildserver image family used by the F-Droid
+            # pipeline. The generic image can produce different native React
+            # Native libraries and is not a valid reproducibility reference.
             docker run --rm -u vagrant --entrypoint /bin/bash \
               -v "$GITHUB_WORKSPACE/fdroiddata:/build" \
               -v "$GITHUB_WORKSPACE/fdroidserver:/home/vagrant/fdroidserver" \
-              registry.gitlab.com/fdroid/fdroidserver:buildserver \
+              registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
               -lc '. /etc/profile; export PATH="$fdroidserver:$PATH" PYTHONPATH="$fdroidserver:$fdroidserver/examples"; git config --global --add safe.directory /build; git config --global --add safe.directory /home/vagrant/fdroidserver; cd /build; fdroid readmeta; fdroid fetchsrclibs --verbose com.willian.willdo:'"$vercode"'; fdroid build --on-server --no-tarball com.willian.willdo:'"$vercode"' --verbose'
           }
           build_one 351
