@@ -62,7 +62,10 @@ if [[ ! -d "$old_stub_dir" ]]; then
 fi
 mkdir -p "$new_stub_dir"
 mv "$old_stub_dir"/* "$new_stub_dir"/
-rmdir -p "$old_stub_dir"
+if ! rmdir -p "$old_stub_dir" 2>/dev/null && [[ -d "$old_stub_dir" ]]; then
+  echo "Não foi possível remover o diretório antigo dos stubs: $old_stub_dir" >&2
+  exit 1
+fi
 
 if grep -R -n -E 'com[./]google[./]firebase[./]messaging' "$notifications_android/src"; then
   echo "Namespace bloqueado do Firebase ainda aparece em expo-notifications." >&2
