@@ -42,4 +42,31 @@ sed -i -e '/com.android.installreferrer.api/d' \
 sed -i -e '/firebase/d' "$notifications_gradle"
 cp -a "$1/firebase-messaging/src" "$notifications_android"
 
+# The APK scanner blocks classes under com.google.firebase.messaging, even
+# though these are local no-op stubs and not Google's Firebase SDK. Relocate
+# the stubs and update Expo Notifications' references so the APK contains no
+# classes in the blocked namespace.
+old_namespace=com.google.firebase.messaging
+new_namespace=org.freedbyfdroid.stub.firebase.messaging
+while IFS= read -r -d '' source_file; do
+  sed -i "s|$old_namespace|$new_namespace|g" "$source_file"
+done < <(find "$notifications_android/src" -type f \
+  \( -name '*.java' -o -name '*.kt' -o -name '*.xml' \) -print0)
+
+stub_java_root="$notifications_android/src/main/java"
+old_stub_dir="$stub_java_root/com/google/firebase/messaging"
+new_stub_dir="$stub_java_root/org/freedbyfdroid/stub/firebase/messaging"
+if [[ ! -d "$old_stub_dir" ]]; then
+  echo "Diretório esperado dos stubs não encontrado: $old_stub_dir" >&2
+  exit 1
+fi
+mkdir -p "$new_stub_dir"
+mv "$old_stub_dir"/* "$new_stub_dir"/
+rmdir -p "$old_stub_dir"
+
+if grep -R -n -E 'com[./]google[./]firebase[./]messaging' "$notifications_android/src"; then
+  echo "Namespace bloqueado do Firebase ainda aparece em expo-notifications." >&2
+  exit 1
+fi
+
 echo "Dependências Android preparadas como na receita F-Droid."

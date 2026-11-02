@@ -14,11 +14,8 @@ jobs:
     steps:
       - name: Check out the release source
         uses: actions/checkout@v4
-        with:
-          # This checkout supplies the current 2.3.15 F-Droid recipe without
-          # the minification setting that broke notifications in the 352 APK.
-          ref: b50961b68e76f001b8c31cf317f90f93795af298
-          fetch-depth: 1
+        # Use the workflow's commit for the current metadata mirror. The recipe
+        # itself still pins the app source commit in its Build entries.
 
       - name: Fetch the F-Droid buildserver tools
         shell: bash
