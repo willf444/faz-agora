@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p fdroiddata/metadata fdroiddata/srclibs
+          mkdir -p fdroiddata/metadata fdroiddata/srclibs fdroiddata/build fdroiddata/tmp
           cp packaging/fdroid/com.willian.willdo.yml \
             fdroiddata/metadata/com.willian.willdo.yml
           cat > fdroiddata/srclibs/firebase-stub.yml <<'EOF'
@@ -49,21 +49,42 @@ jobs:
             srclibs/firebase-stub.yml
           git -C fdroiddata commit --quiet -m 'Temporary F-Droid reference build'
 
-      - name: Build versionCodes 351 and 352 in the F-Droid buildserver
+      - name: Build versionCodes 351 and 352 in the F-Droid CI build path
         shell: bash
         run: |
           set -euo pipefail
           chmod -R a+rwX fdroiddata
           build_one() {
             local vercode="$1"
-            # Keep the same buildserver image family used by the F-Droid
-            # pipeline. The generic image can produce different native React
-            # Native libraries and is not a valid reproducibility reference.
+            # F-Droid's CI runs the build from /home/vagrant, with sources in
+            # /home/vagrant/build/<appid>. Native ELF build IDs include build
+            # paths, so building from /build produces different APK bytes even
+            # when the compiled code is otherwise identical.
             docker run --rm -u vagrant --entrypoint /bin/bash \
-              -v "$GITHUB_WORKSPACE/fdroiddata:/build" \
+              -v "$GITHUB_WORKSPACE/fdroiddata:/builds/fdroid/fdroiddata" \
               -v "$GITHUB_WORKSPACE/fdroidserver:/home/vagrant/fdroidserver" \
+              -v "$GITHUB_WORKSPACE/fdroiddata/tmp:/home/vagrant/tmp" \
               registry.gitlab.com/fdroid/fdroidserver:buildserver-trixie \
-              -lc '. /etc/profile; export PATH="$fdroidserver:$PATH" PYTHONPATH="$fdroidserver:$fdroidserver/examples"; git config --global --add safe.directory /build; git config --global --add safe.directory /home/vagrant/fdroidserver; cd /build; fdroid readmeta; fdroid fetchsrclibs --verbose com.willian.willdo:'"$vercode"'; fdroid build --on-server --no-tarball com.willian.willdo:'"$vercode"' --verbose'
+              -lc '
+                set -euo pipefail
+                . /etc/profile.d/bsenv.sh
+                export PATH="$fdroidserver:$PATH"
+                export PYTHONPATH="$fdroidserver:$fdroidserver/examples"
+                export PYTHONUNBUFFERED=true HOME=/home/vagrant
+                export GRADLE_USER_HOME=/home/vagrant/.gradle ANDROID_HOME=/opt/android-sdk
+                git config --global --add safe.directory /builds/fdroid/fdroiddata
+                git config --global --add safe.directory /home/vagrant/fdroidserver
+                mkdir -p /home/vagrant/build /home/vagrant/metadata
+                cp -R /builds/fdroid/fdroiddata/build/. /home/vagrant/build/
+                cp /builds/fdroid/fdroiddata/metadata/com.willian.willdo.yml /home/vagrant/metadata/
+                ln -s /builds/fdroid/fdroiddata /home/vagrant/fdroiddata
+                ln -s /builds/fdroid/fdroiddata/srclibs /home/vagrant/srclibs
+                cd /home/vagrant
+                fdroid fetchsrclibs --verbose "com.willian.willdo:$1"
+                rm /home/vagrant/fdroiddata
+                unset CI
+                fdroid build --verbose --test --refresh-scanner --on-server --no-tarball "com.willian.willdo:$1"
+              ' _ "$vercode"
           }
           build_one 351
           build_one 352
@@ -74,5 +95,5 @@ jobs:
           name: faz-agora-v2.3.15-351-352-unsigned
           if-no-files-found: error
           path: |
-            fdroiddata/unsigned/com.willian.willdo_351.apk
-            fdroiddata/unsigned/com.willian.willdo_352.apk
+            fdroiddata/tmp/com.willian.willdo_351.apk
+            fdroiddata/tmp/com.willian.willdo_352.apk
