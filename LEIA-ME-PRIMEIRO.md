@@ -12,10 +12,11 @@ Antes de modificar, compilar, publicar ou enviar qualquer mensagem sobre este pr
 - A release `v2.3.15` contém os APKs 351 (32-bit) e 352 (64-bit), compilados por nosso workflow com `fdroid build --on-server` no `buildserver-trixie`.
 - O APK 352 foi instalado em um Samsung A56 e uma tarefa futura notificou e tocou o som corretamente.
 - O MR oficial do F-Droid é [!53840](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/53840). Ele ainda está aberto e não significa publicação no catálogo.
-- Nossa execução `40342315030` passou, mas não reproduziu o APK oficial. A pipeline oficial `2986853180`, job `17495916845`, falhou na comparação do 351: duas bibliotecas nativas diferiam apenas no build ID. A causa provável foi identificada: nosso workflow compilava de `/build`, enquanto o CI oficial compila de `/home/vagrant`; o F-Droid documenta que o caminho de build altera esses IDs.
-- O workflow local foi ajustado para usar `/home/vagrant/build/<appid>` e os mesmos parâmetros de `fdroid build` do CI. Ainda precisa ser executado e comparado; até lá a atualização continua sem validação oficial.
+- A execução `41472912929` passou usando `/home/vagrant/build/<appid>`, como o CI oficial. O APK 351 unsigned que geramos tem exatamente o mesmo SHA-256 do 351 unsigned do job oficial anterior (`7dd9678c…`).
+- Os assets 351/352 da release foram substituídos pelos APKs assinados com a chave permitida: 351 `0385b53f…` e 352 `0cbdef09…`. O 352 novo difere do 352 já testado no A56 somente pelos build IDs em `libexpo-modules-core.so` e `librnscreens.so`; os demais arquivos são idênticos.
+- A versão 2.3.15 ainda precisa de uma nova pipeline oficial para validar os dois assets e do merge no MR antes de ser considerada atualizada no F-Droid.
 - O MR continua aberto e a versão 2.3.15 não está validada para publicação no F-Droid. A release GitHub atual contém referências que ainda não passaram na comparação oficial. Não afirmar que a atualização está pronta.
-- O 352 dessa execução própria continua sendo o APK testado no Samsung A56 e notificou corretamente. Não pedir novo teste do usuário; primeiro corrigir a reprodução do 351 e gerar os dois artefatos no mesmo ambiente efetivo da pipeline oficial.
+- O 352 original foi testado no Samsung A56 e notificou corretamente. O APK substituto tem os mesmos arquivos de app; só diferem os dois build IDs. Não pedir novo teste sem necessidade.
 
 ## Organização local
 
